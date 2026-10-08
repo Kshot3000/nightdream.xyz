@@ -227,6 +227,17 @@ img, svg { display: block; }
   letter-spacing: -0.01em;
 }
 .panel-head .muted { font-size: 12px; }
+/* Panel-head searches (#stakeSearch / #govSearch) were the only text inputs
+   with no base styling — browser-default light boxes on dark panels, no
+   focus ring, and an intrinsic width the flex row could not shrink. Match
+   the .filters input pattern; flex sizing lets them shrink on narrow
+   screens and grow to a capped, right-aligned search box on desktop. */
+.panel-head input {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none;
+  flex: 1 1 180px; min-width: 0; max-width: 260px;
+}
+.panel-head input:focus { border-color: rgba(139,124,255,0.45); box-shadow: 0 0 0 2px rgba(139,124,255,0.35); }
 
 .seg { display: inline-flex; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
 .seg-btn {
@@ -824,6 +835,9 @@ canvas.chart-lg { width: 100% !important; height: 100% !important; }
   .cmdk input, .filters input, .filters select,
   .calc-box input, .input, .search input,
   .panel-head input, .token-picker { font-size: 16px; }
+  /* ~390px: a wrapped panel-head search should use the full row (easier
+     tap target, no 260px desktop cap leaving dead space beside it). */
+  .panel-head input { max-width: none; }
 }
 
 /* ---------- Ad slots (hidden until ads enabled) ---------- */
