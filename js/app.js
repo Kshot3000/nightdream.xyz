@@ -1110,7 +1110,7 @@
       <td><span title="${d.id}">${govIdShort(d.id)}</span></td>
       <td>${adaCell(d.power)}</td>
       <td>${d.active ? '<span class="up">active</span>' : '<span class="muted">inactive</span>'}</td></tr>`).join("")
-      || `<tr><td colspan="4"><div class="empty">DRep data unavailable.</div></td></tr>`;
+      || `<tr><td colspan="4"><div class="empty"><strong>DRep leaderboard unavailable</strong><span class="muted" style="display:block;margin-top:4px">Koios responded without any DRep entries, so voting power can't be shown right now. Use Retry above.</span></div></td></tr>`;
   }
 
   /* ——— Midnight ——— */
