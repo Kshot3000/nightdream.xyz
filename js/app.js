@@ -473,11 +473,11 @@
           <div class="panel-head"><h2>Price chart</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <div class="seg" id="chartType">
-                <button class="seg-btn ${chartType === "line" ? "active" : ""}" data-ctype="line">Line</button>
-                <button class="seg-btn ${chartType === "candle" ? "active" : ""}" data-ctype="candle">Candles</button>
+                <button class="seg-btn ${chartType === "line" ? "active" : ""}" data-ctype="line" aria-pressed="${chartType === "line"}">Line</button>
+                <button class="seg-btn ${chartType === "candle" ? "active" : ""}" data-ctype="candle" aria-pressed="${chartType === "candle"}">Candles</button>
               </div>
               <div class="seg" id="tokenRange">
-                ${["24H", "7D", "30D", "1Y"].map((r) => `<button class="seg-btn ${chartRanges.TOKEN === r ? "active" : ""}" data-range="${r}">${r}</button>`).join("")}
+                ${["24H", "7D", "30D", "1Y"].map((r) => `<button class="seg-btn ${chartRanges.TOKEN === r ? "active" : ""}" data-range="${r}" aria-pressed="${chartRanges.TOKEN === r}">${r}</button>`).join("")}
               </div>
             </div>
           </div>
