@@ -838,6 +838,11 @@ canvas.chart-lg { width: 100% !important; height: 100% !important; }
   /* ~390px: a wrapped panel-head search should use the full row (easier
      tap target, no 260px desktop cap leaving dead space beside it). */
   .panel-head input { max-width: none; }
+  /* Small phones: the toast host is fixed right:20px with no left anchor and
+     toasts cap at 320px — on a 320-360px viewport a full-width toast would
+     push its left edge off-screen. Anchor both sides so it stays inside. */
+  .toast-host { left: 12px; right: 12px; bottom: 12px; }
+  .toast { max-width: 100%; }
 }
 
 /* ---------- Ad slots (hidden until ads enabled) ---------- */
