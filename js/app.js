@@ -244,7 +244,13 @@
       if (marketsFailed()) {
         $("#overviewStats").innerHTML = marketsErrHTML();
         bindMarketsRetry($("#overviewStats"));
-        $("#ovMovers").innerHTML = $("#ovTrending").innerHTML = $("#ovWatch").innerHTML = "";
+        /* Don't leave the three panels below blank under their headings —
+           an unexplained empty panel reads as a broken page, not a feed
+           outage. Each gets the same explanation, pointing at Retry above. */
+        const ovErr = `<div class="empty" style="padding:20px"><strong>Market data unavailable</strong><span class="muted">Prices couldn't be loaded — use Retry above.</span></div>`;
+        $("#ovMovers").innerHTML = ovErr;
+        $("#ovTrending").innerHTML = ovErr;
+        $("#ovWatch").innerHTML = ovErr;
       } else {
         $("#overviewStats").innerHTML = skelCards(8);
         $("#ovMovers").innerHTML = skel(6);
