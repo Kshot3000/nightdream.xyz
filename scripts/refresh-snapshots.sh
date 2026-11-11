@@ -4,7 +4,8 @@
 # tree: it never rebases or commits while another session has uncommitted
 # non-snapshot work, and it only ever commits data/snapshots/.
 set -u
-cd ~/workspace/nightdream || exit 1
+# Run from the repo root no matter where the script is called from.
+cd "$(dirname "$0")/.." || exit 1
 
 # Any uncommitted work outside data/snapshots? (belongs to another session)
 DIRTY_OTHER=$(git status --porcelain | grep -v '^.. data/snapshots/' || true)

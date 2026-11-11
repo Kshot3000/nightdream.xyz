@@ -4,6 +4,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const fmt = ND.fmt;
+  const esc = ND.esc, safeUrl = ND.safeUrl, safeImg = ND.safeImg;
   const chClass = (n) => (n > 0 ? "up" : n < 0 ? "down" : "flat");
   const watch = new Set(JSON.parse(localStorage.getItem("nd.watch") || "[]"));
   const chartRanges = { ADA: "30D", NIGHT: "30D", TOKEN: "7D" };
@@ -53,16 +54,25 @@
   /* token icon: CoinGecko image with letter fallback */
   function icon(t, sm) {
     const cls = "token-avatar" + (sm ? " sm" : "");
-    const tick = (t && t.ticker ? t.ticker : "?").replace(/'/g, "");
-    if (t && t.image) {
-      return `<img class="${cls}" src="${t.image}" alt="" loading="lazy" decoding="async" onerror="this.outerHTML=window.ND.__fbIcon('${tick}','${cls}')">`;
+    const tick = t && t.ticker ? t.ticker : "?";
+    const src = t && safeImg(t.image);
+    if (src) {
+      /* No inline onerror handler: a broken image is swapped for the letter
+         fallback by the delegated listener below, so no feed-supplied string
+         ever lands inside JavaScript. */
+      return `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" decoding="async" data-fb-ticker="${esc(tick)}" data-fb-cls="${cls}">`;
     }
-    return window.ND.__fbIcon(tick, cls);
+    return ND.__fbIcon(tick, cls);
   }
   ND.__fbIcon = (ticker, cls) => {
     const ch = String(ticker || "?").replace(/^\$/, "").charAt(0).toUpperCase() || "?";
-    return `<span class="${cls}">${ch}</span>`;
+    return `<span class="${esc(cls)}">${esc(ch)}</span>`;
   };
+  document.addEventListener("error", (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== "IMG" || !img.dataset || img.dataset.fbTicker == null) return;
+    img.outerHTML = ND.__fbIcon(img.dataset.fbTicker, img.dataset.fbCls || "token-avatar");
+  }, true);
   /* Honest feed badge: shown when the table was filled by the DexScreener
      fallback because CoinGecko was unreachable from the visitor's network. */
   function feedBadge() {
@@ -88,7 +98,7 @@
     const key = String(name || "").toLowerCase().replace(/[^a-z]/g, "");
     const file = DEX_LOGOS[key];
     const img = file ? `<img src="./assets/ecosystem/${file}" alt="" loading="lazy" decoding="async" />` : "";
-    return `<span class="dex-cell">${img}<span>${name || "—"}</span></span>`;
+    return `<span class="dex-cell">${img}<span>${esc(name || "—")}</span></span>`;
   }
   function liqBar(liq, maxLiq) {
     const pct = maxLiq > 0 ? ((liq || 0) / maxLiq * 100).toFixed(1) : 0;
@@ -267,7 +277,7 @@
        the guard so a CoinGecko response that omits an id can't throw and
        blank the whole overview. */
     const card = (t) => { if (!t) return ""; const extra = c24(t); return `
-      <div class="stat-card"><div class="stat-label">${t.ticker} · ${extra[0]}</div>
+      <div class="stat-card"><div class="stat-label">${esc(t.ticker)} · ${extra[0]}</div>
       <div class="stat-value">${extra[1]}</div>
       <div class="stat-sub ${chClass(extra[3])}">${extra[2]}</div></div>`; };
     $("#overviewStats").innerHTML =
@@ -286,14 +296,14 @@
     const gainers = [...T].filter((t) => (t.ch24 || 0) > 0).sort((a, b) => b.ch24 - a.ch24).slice(0, 5);
     const losers = [...T].filter((t) => (t.ch24 || 0) < 0).sort((a, b) => a.ch24 - b.ch24).slice(0, 5);
     $("#ovMovers").innerHTML = [...gainers, ...losers].map((t) => `
-      <a class="list-row row-link" href="#token/${t.ticker}">
-        <div class="token-cell">${icon(t, 1)}<strong>${t.ticker}</strong></div>
+      <a class="list-row row-link" href="#token/${esc(t.ticker)}">
+        <div class="token-cell">${icon(t, 1)}<strong>${esc(t.ticker)}</strong></div>
         <span class="${chClass(t.ch24)}">${fmt.pct(t.ch24)}</span>
       </a>`).join("");
     const trending = [...T].filter((t) => t.ticker !== "ADA").sort((a, b) => (b.vol || 0) - (a.vol || 0)).slice(0, 5);
     $("#ovTrending").innerHTML = trending.map((t, i) => `
-      <a class="list-row row-link" href="#token/${t.ticker}">
-        <div class="token-cell"><span class="rank-badge${i < 3 ? " top" : ""}">#${i + 1}</span>${icon(t, 1)}<div class="token-meta"><strong>${t.ticker}</strong><span>${t.name}</span></div></div>
+      <a class="list-row row-link" href="#token/${esc(t.ticker)}">
+        <div class="token-cell"><span class="rank-badge${i < 3 ? " top" : ""}">#${i + 1}</span>${icon(t, 1)}<div class="token-meta"><strong>${esc(t.ticker)}</strong><span>${esc(t.name)}</span></div></div>
         <div style="text-align:right"><div>${fmt.prx(t.price, 6)}</div><div class="${chClass(t.ch24)}" style="font-size:12px">${fmt.pct(t.ch24)}</div></div>
       </a>`).join("");
     renderWatchPanel();
@@ -307,7 +317,7 @@
       const maxLiq = Math.max(...rows.map((p) => p.liq || 0), 1);
       const tb = $("#ovPools").querySelector("tbody");
       tb.innerHTML = rows.map((p) => `
-        <tr><td><strong>${p.pair}</strong></td><td>${dexCell(p.dex)}</td><td>${liqBar(p.liq, maxLiq)}</td><td>${fmt.usdx(p.vol24)}</td></tr>`).join("")
+        <tr><td><strong>${esc(p.pair)}</strong></td><td>${dexCell(p.dex)}</td><td>${liqBar(p.liq, maxLiq)}</td><td>${fmt.usdx(p.vol24)}</td></tr>`).join("")
         || (agg.dexes.length
           ? `<tr><td colspan="4" class="muted">No pair data.</td></tr>`
           : `<tr><td colspan="4"><div class="empty" style="padding:18px 8px"><strong>DEX feed unavailable</strong><br><button class="btn btn-sm" type="button" data-retry-dex>Retry</button></div></td></tr>`);
@@ -335,8 +345,8 @@
     const items = [...watch].map((id) => ND.getToken(id)).filter(Boolean).slice(0, 6);
     el.innerHTML = items.length ? items.map((t) => `
       <div class="list-row">
-        <div class="token-cell"><a class="row-link" href="#token/${t.ticker}">${icon(t, 1)}<strong>${t.ticker}</strong></a>
-          <button class="star-btn on" data-star="${t.ticker}" type="button" aria-pressed="true" aria-label="Remove ${t.ticker} from watchlist">★</button></div>
+        <div class="token-cell"><a class="row-link" href="#token/${esc(t.ticker)}">${icon(t, 1)}<strong>${esc(t.ticker)}</strong></a>
+          <button class="star-btn on" data-star="${esc(t.ticker)}" type="button" aria-pressed="true" aria-label="Remove ${esc(t.ticker)} from watchlist">★</button></div>
         <span class="${chClass(t.ch24)}">${fmt.pct(t.ch24)}</span>
       </div>`).join("")
       : `<div class="empty" style="padding:20px"><strong>No favorites yet</strong>Star tokens from Markets.</div>`;
@@ -352,7 +362,7 @@
       el.innerHTML = `
         <div class="pf-mini-worth">${fmt.usdx(s.totalUsd)}<span class="muted"> net worth</span></div>
         ${s.positions.slice(0, 3).map((p) => `
-          <div class="list-row"><div class="token-cell">${icon({ ticker: p.ticker, image: p.image }, 1)}<strong>${p.ticker}</strong></div>
+          <div class="list-row"><div class="token-cell">${icon({ ticker: p.ticker, image: p.image }, 1)}<strong>${esc(p.ticker)}</strong></div>
           <span>${fmt.usdx(p.value)}</span></div>`).join("")}
         <a class="btn btn-sm btn-ghost" href="#portfolio" style="margin-top:8px">Open portfolio</a>`;
     } else {
@@ -430,9 +440,9 @@
     }
     tb.innerHTML = list.map((t, i) => `
       <tr>
-        <td><button class="star-btn ${watch.has(t.ticker) ? "on" : ""}" data-star="${t.ticker}" type="button" aria-pressed="${watch.has(t.ticker)}" aria-label="Toggle watchlist for ${t.ticker}">★</button></td>
+        <td><button class="star-btn ${watch.has(t.ticker) ? "on" : ""}" data-star="${esc(t.ticker)}" type="button" aria-pressed="${watch.has(t.ticker)}" aria-label="Toggle watchlist for ${esc(t.ticker)}">★</button></td>
         <td class="rank-cell">${i + 1}</td>
-        <td><a class="token-cell row-link" href="#token/${t.ticker}" data-goto="token/${t.ticker}">${icon(t, 1)}<div class="token-meta"><strong>${t.ticker}</strong><span>${t.name}</span></div></a></td>
+        <td><a class="token-cell row-link" href="#token/${esc(t.ticker)}" data-goto="token/${esc(t.ticker)}">${icon(t, 1)}<div class="token-meta"><strong>${esc(t.ticker)}</strong><span>${esc(t.name)}</span></div></a></td>
         <td>${fmt.prx(t.price, t.price < 0.01 ? 6 : 4)}</td>
         <td class="${chClass(t.ch1h)}">${fmt.pct(t.ch1h)}</td>
         <td class="${chClass(t.ch24)}">${fmt.pct(t.ch24)}</td>
@@ -465,7 +475,7 @@
       <div class="token-banner">
         <div class="big-avatar">${icon(t)}</div>
         <div style="flex:1;min-width:200px">
-          <h1>${t.name} <button class="star-btn ${watch.has(t.ticker) ? "on" : ""}" data-star="${t.ticker}" type="button" aria-pressed="${watch.has(t.ticker)}" aria-label="Toggle watchlist for ${t.ticker}" style="font-size:18px">★</button></h1>
+          <h1>${esc(t.name)} <button class="star-btn ${watch.has(t.ticker) ? "on" : ""}" data-star="${esc(t.ticker)}" type="button" aria-pressed="${watch.has(t.ticker)}" aria-label="Toggle watchlist for ${esc(t.ticker)}" style="font-size:18px">★</button></h1>
           <div class="price-row"><span class="price">${fmt.prx(t.price, t.price < 0.01 ? 6 : 4)}</span>
             <span class="${chClass(t.ch24)}">${fmt.pct(t.ch24)} 24h</span>
             <span class="${chClass(t.ch7d)}">${fmt.pct(t.ch7d)} 7d</span></div>
@@ -513,7 +523,7 @@
       const seen = new Map();
       ND.TOKENS.forEach((x) => { if (!seen.has(x.ticker)) seen.set(x.ticker, x); });
       picker.innerHTML = [...seen.values()].sort((a, b) => a.ticker.localeCompare(b.ticker))
-        .map((x) => `<option value="${x.ticker}"${x.ticker === t.ticker ? " selected" : ""}>${x.ticker} — ${x.name}</option>`).join("");
+        .map((x) => `<option value="${esc(x.ticker)}"${x.ticker === t.ticker ? " selected" : ""}>${esc(x.ticker)} — ${esc(x.name)}</option>`).join("");
       picker.addEventListener("change", (e) => { location.hash = "#token/" + e.target.value; });
     }
 
@@ -551,17 +561,17 @@
       const L = d.links || {};
       const items = [];
       const hp = (L.homepage || []).filter(Boolean)[0];
-      if (hp) items.push(`<a class="link-out" href="${hp}" target="_blank" rel="noopener">Website ↗</a>`);
+      if (safeUrl(hp)) items.push(`<a class="link-out" href="${esc(safeUrl(hp))}" target="_blank" rel="noopener noreferrer">Website ↗</a>`);
       const ex = (L.blockchain_site || []).filter(Boolean)[0];
-      if (ex) items.push(`<a class="link-out" href="${ex}" target="_blank" rel="noopener">Explorer ↗</a>`);
-      if (L.twitter_screen_name) items.push(`<a class="link-out" href="https://x.com/${L.twitter_screen_name}" target="_blank" rel="noopener">X ↗</a>`);
-      if (L.telegram_channel_identifier && !/\s/.test(L.telegram_channel_identifier)) items.push(`<a class="link-out" href="https://t.me/${L.telegram_channel_identifier}" target="_blank" rel="noopener">Telegram ↗</a>`);
+      if (safeUrl(ex)) items.push(`<a class="link-out" href="${esc(safeUrl(ex))}" target="_blank" rel="noopener noreferrer">Explorer ↗</a>`);
+      if (/^[A-Za-z0-9_]{1,30}$/.test(L.twitter_screen_name || "")) items.push(`<a class="link-out" href="https://x.com/${L.twitter_screen_name}" target="_blank" rel="noopener noreferrer">X ↗</a>`);
+      if (/^[A-Za-z0-9_+-]{1,64}$/.test(L.telegram_channel_identifier || "")) items.push(`<a class="link-out" href="https://t.me/${L.telegram_channel_identifier}" target="_blank" rel="noopener noreferrer">Telegram ↗</a>`);
       const tl = $("#tokenLinks");
       if (tl) tl.innerHTML = items.join("");
       const desc = (d.description && d.description.en || "").replace(/<[^>]*>/g, "").split(". ").slice(0, 3).join(". ");
       const ta = $("#tokenAbout");
       if (ta) ta.innerHTML = desc
-        ? `<p style="font-size:13px;line-height:1.6">${desc}${desc.endsWith(".") ? "" : "."}</p><p class="muted" style="font-size:11px">Source: CoinGecko</p>`
+        ? `<p style="font-size:13px;line-height:1.6">${esc(desc)}${desc.endsWith(".") ? "" : "."}</p><p class="muted" style="font-size:11px">Source: CoinGecko</p>`
         : `<p class="muted">No description available.</p>`;
       const md = d.market_data || {};
       statRow([
@@ -609,11 +619,11 @@
       const dec = info && info.decimals != null ? Number(info.decimals)
         : meta.decimals != null ? Number(meta.decimals) : 0;
       $("#tokenOnchain").innerHTML = `
-        <div class="kv"><span>Policy ID</span><button class="asset-id" data-copy="${t.policy}" title="${t.policy}">${fmt.hexShort(t.policy, 16)}</button></div>
-        <div class="kv"><span>Fingerprint</span><code style="font-size:11px"${info.fingerprint ? ` title="${info.fingerprint}"` : ""}>${info.fingerprint ? fmt.hexShort(info.fingerprint, 16) : "—"}</code></div>
+        <div class="kv"><span>Policy ID</span><button class="asset-id" data-copy="${esc(t.policy)}" title="${esc(t.policy)}">${esc(fmt.hexShort(t.policy, 16))}</button></div>
+        <div class="kv"><span>Fingerprint</span><code style="font-size:11px"${info.fingerprint ? ` title="${esc(info.fingerprint)}"` : ""}>${info.fingerprint ? esc(fmt.hexShort(String(info.fingerprint), 16)) : "—"}</code></div>
         <div class="kv"><span>Decimals</span><span>${meta.decimals != null ? meta.decimals : "—"}</span></div>
         <div class="kv"><span>Total supply</span><span>${fmt.numx(Number(info.total_supply) / Math.pow(10, dec))}</span></div>
-        <div class="kv"><span>Explorer</span><a href="https://cardanoscan.io/token/${t.unit}" target="_blank" rel="noopener">Cardanoscan ↗</a></div>`;
+        <div class="kv"><span>Explorer</span><a href="https://cardanoscan.io/token/${encodeURIComponent(t.unit || "")}" target="_blank" rel="noopener">Cardanoscan ↗</a></div>`;
       const cp = $("#tokenOnchain [data-copy]");
       if (cp) cp.addEventListener("click", () => {
         navigator.clipboard?.writeText(cp.dataset.copy).then(() => toast("Policy ID copied"));
@@ -649,12 +659,12 @@
         </div>
         <div class="muted" style="font-size:11px;margin-top:6px">24h DEX activity · DexScreener + GeckoTerminal (buys/sells from DexScreener only)</div>`;
       if (pt) pt.innerHTML = dex.pairs.slice(0, 12).map((p) => `
-        <tr><td><strong>${p.dex}</strong></td><td>${p.pair}</td>
+        <tr><td><strong>${esc(p.dex)}</strong></td><td>${esc(p.pair)}</td>
         <td>${p.priceUsd ? fmt.prx(p.priceUsd, 6) : "—"}</td>
         <td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td>
         <td>${fmt.usdx(p.vol24)}</td><td>${fmt.usdx(p.liq)}</td>
         <td><span class="up">${p.buys24 == null ? "—" : p.buys24}</span> / <span class="down">${p.sells24 == null ? "—" : p.sells24}</span></td>
-        <td><a href="${p.url}" target="_blank" rel="noopener">Trade ↗</a></td></tr>`).join("");
+        <td><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">Trade ↗</a></td></tr>`).join("");
     });
   }
 
@@ -687,12 +697,12 @@
       </div>
       <div class="muted" style="font-size:11px;margin-top:6px">Top ADA pairs across tracked tokens · DexScreener</div>`;
     if (pt) pt.innerHTML = adaPairs.map((p) => `
-      <tr><td><strong>${p.dex}</strong></td><td>${p.pair}</td>
+      <tr><td><strong>${esc(p.dex)}</strong></td><td>${esc(p.pair)}</td>
       <td>${p.priceUsd ? fmt.prx(p.priceUsd, 6) : "—"}</td>
       <td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td>
       <td>${fmt.usdx(p.vol24)}</td><td>${fmt.usdx(p.liq)}</td>
       <td><span class="up">${p.buys24 == null ? "—" : p.buys24}</span> / <span class="down">${p.sells24 == null ? "—" : p.sells24}</span></td>
-      <td><a href="${p.url}" target="_blank" rel="noopener">Trade ↗</a></td></tr>`).join("");
+      <td><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">Trade ↗</a></td></tr>`).join("");
   }
 
   async function paintTokenChart(t) {
@@ -705,7 +715,7 @@
       if (currentToken !== t || !$("#tokenChart")) return;
       if (candles && candles.length > 1) {
         NDCharts.drawCandles($("#tokenChart"), candles, {
-          chartLabel: `${t.ticker} price chart`,
+          chartLabel: `${esc(t.ticker)} price chart`,
           onHover: (c) => {
             const el = $("#hoverReadout");
             if (el) el.textContent = c ? `O ${fmt.exactUsd(c.o)} · H ${fmt.exactUsd(c.h)} · L ${fmt.exactUsd(c.l)} · C ${fmt.exactUsd(c.c)}` : "";
@@ -720,7 +730,7 @@
     if (!series) { chartError($("#tokenChart"), "Price chart unavailable", () => { if (currentToken === t) paintTokenChart(t); }); return; }
     NDCharts.drawLineChart($("#tokenChart"), series, {
       range,
-      chartLabel: `${t.ticker} price chart`,
+      chartLabel: `${esc(t.ticker)} price chart`,
       onHover: (p) => {
         const el = $("#hoverReadout");
         if (el) el.textContent = p ? `${fmt.exactUsd(p.v)} · ${new Date(p.t).toLocaleString()}` : "";
@@ -742,7 +752,7 @@
       }
       if (s.error) {
         $("#pfDash").style.display = "none";
-        $("#pfConnect").innerHTML = `<div class="panel"><div class="empty"><strong>${s.error}</strong><br><br><button class="btn" id="pfRetry" type="button">Retry</button></div></div>`;
+        $("#pfConnect").innerHTML = `<div class="panel"><div class="empty"><strong>${esc(s.error)}</strong><br><br><button class="btn" id="pfRetry" type="button">Retry</button></div></div>`;
         $("#pfRetry")?.addEventListener("click", () => { WALLET.refresh().then(() => this.render()); });
         return;
       }
@@ -751,9 +761,9 @@
     renderConnect(provs) {
       $("#pfDash").style.display = "none";
       const cards = provs.length ? provs.map((p) => `
-        <button class="wallet-card" data-wallet="${p.key}" type="button">
-          ${p.icon ? `<img src="${p.icon}" alt="" loading="lazy" decoding="async">` : `<span class="token-avatar">${p.name.charAt(0)}</span>`}
-          <strong>${p.name}</strong><span class="muted">Connect</span>
+        <button class="wallet-card" data-wallet="${esc(p.key)}" type="button">
+          ${safeImg(p.icon) ? `<img src="${esc(safeImg(p.icon))}" alt="" loading="lazy" decoding="async">` : `<span class="token-avatar">${esc(String(p.name || "?").charAt(0))}</span>`}
+          <strong>${esc(p.name)}</strong><span class="muted">Connect</span>
         </button>`).join("")
         : `<div class="empty"><strong>No Cardano wallet extension detected</strong><span class="muted">Install one to continue:</span>
           <div class="install-row">${Object.entries(WALLET.INSTALL).map(([k, u]) =>
@@ -790,8 +800,8 @@
       $("#pfStats").innerHTML =
         stat("Net worth", fmt.usdx(s.totalUsd), s.updatedAt ? "updated " + fmt.timeAgo(s.updatedAt) : "", 0) +
         stat("Positions", String(s.positions.length), s.nfts.length + " NFTs", 0) +
-        stat("Best 24h", best ? best.ticker : "—", best ? fmt.pct(best.ch24) : "", best ? best.ch24 : 0) +
-        stat("Worst 24h", worst ? worst.ticker : "—", worst ? fmt.pct(worst.ch24) : "", worst ? worst.ch24 : 0);
+        stat("Best 24h", best ? esc(best.ticker) : "—", best ? fmt.pct(best.ch24) : "", best ? best.ch24 : 0) +
+        stat("Worst 24h", worst ? esc(worst.ticker) : "—", worst ? fmt.pct(worst.ch24) : "", worst ? worst.ch24 : 0);
 
       requestAnimationFrame(() => {
         const cv = $("#pfAllocChart");
@@ -802,13 +812,13 @@
       });
       const colors = ["#8b7cff", "#2ee6c5", "#ffb020", "#ff6b7a", "#5b8cff", "#c084fc", "#34d399", "#94a3b8"];
       $("#pfAllocLegend").innerHTML = s.positions.slice(0, 8).map((p, i) => `
-        <span><span><i class="dot-swatch" style="background:${colors[i % colors.length]}"></i>${p.ticker}</span>
+        <span><span><i class="dot-swatch" style="background:${colors[i % colors.length]}"></i>${esc(p.ticker)}</span>
         <span>${s.totalUsd ? ((p.value / s.totalUsd) * 100).toFixed(1) : 0}% · ${fmt.usdx(p.value)}</span></span>`).join("");
 
       $("#pf-tokens").innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>
         <th>Token</th><th>Amount</th><th>Price</th><th>Value</th><th>24h</th></tr></thead><tbody>
         ${s.positions.map((p) => `
-          <tr><td><div class="token-cell">${icon({ ticker: p.ticker, image: p.image }, 1)}<div class="token-meta"><strong>${p.ticker}</strong><span>${p.name}</span></div></div></td>
+          <tr><td><div class="token-cell">${icon({ ticker: p.ticker, image: p.image }, 1)}<div class="token-meta"><strong>${esc(p.ticker)}</strong><span>${esc(p.name)}</span></div></div></td>
           <td title="${fmt.exactNum(p.qty)}">${p.qty.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
           <td>${p.price ? fmt.prx(p.price, 6) : "—"}</td><td>${fmt.usdx(p.value)}</td>
           <td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td></tr>`).join("")
@@ -817,15 +827,15 @@
 
       $("#pf-nfts").innerHTML = s.nfts.length
         ? `<div class="nft-grid">${s.nfts.slice(0, 24).map((n) => `
-          <div class="nft-card"><div class="nft-art">${(n.name || "?").charAt(0).toUpperCase()}</div>
-          <div class="nft-name">${n.name}</div><div class="muted" style="font-size:11px">${fmt.hexShort(n.unit, 10)}</div></div>`).join("")}</div>`
+          <div class="nft-card"><div class="nft-art">${esc((n.name || "?").charAt(0).toUpperCase())}</div>
+          <div class="nft-name">${esc(n.name)}</div><div class="muted" style="font-size:11px">${esc(fmt.hexShort(n.unit, 10))}</div></div>`).join("")}</div>`
         : `<div class="empty"><strong>No NFTs detected</strong><span class="muted">Single-unit unknown assets show up here.</span></div>`;
 
       const wallets = [];
       if (s.connected) wallets.push({ label: s.providerName + " · connected", addr: s.address, on: true });
       s.watchOnly.forEach((w) => wallets.push({ label: "Tracked address", addr: w, on: false }));
       $("#pf-wallets").innerHTML = wallets.map((w) => `
-        <div class="list-row"><div><strong>${w.label}</strong><div class="muted" style="font-size:12px">${w.addr}</div></div>
+        <div class="list-row"><div><strong>${esc(w.label)}</strong><div class="muted" style="font-size:12px">${esc(w.addr)}</div></div>
         <span class="tag ${w.on ? "" : "markets"}">${w.on ? "connected" : "tracked"}</span></div>`).join("") + `
         <div class="row-flex" style="margin-top:12px"><input id="watchAddr2" class="input" aria-label="Another Cardano address to track" placeholder="Track another addr1… / stake1…">
         <button class="btn btn-sm" id="watchAddBtn2" type="button">Track</button>
@@ -869,7 +879,7 @@
             return;
           }
           t2.innerHTML = txs.map((x) => `
-            <tr><td><a href="https://cardanoscan.io/transaction/${x.tx_hash}" target="_blank" rel="noopener"><code>${x.tx_hash.slice(0, 12)}…</code> ↗</a></td>
+            <tr><td><a href="https://cardanoscan.io/transaction/${encodeURIComponent(x.tx_hash)}" target="_blank" rel="noopener"><code>${esc(String(x.tx_hash).slice(0, 12))}…</code> ↗</a></td>
             <td>${x.block_time ? new Date(x.block_time * 1000).toLocaleString() : "—"}</td>
             <td class="muted">${x.fee ? fmt.ada(Number(x.fee) / 1e6) : ""}</td></tr>`).join("")
             || `<tr><td colspan="3" class="muted">No recent transactions.</td></tr>`;
@@ -919,7 +929,7 @@
     });
     const colors = ["#8b7cff", "#2ee6c5", "#ffb020", "#ff6b7a", "#5b8cff", "#c084fc", "#34d399", "#94a3b8"];
     $("#dexShareLegend").innerHTML = agg.dexes.map((d, i) => `
-      <span><span><i class="dot-swatch" style="background:${colors[i % colors.length]}"></i>${d.name}</span>
+      <span><span><i class="dot-swatch" style="background:${colors[i % colors.length]}"></i>${esc(d.name)}</span>
       <span>${((d.vol24 / totVol) * 100).toFixed(1)}%</span></span>`).join("");
     $("#dexList").innerHTML = agg.dexes.map((d) => `
       <div class="list-row">${dexCell(d.name)}<span>${fmt.usdx(d.vol24)} · ${d.pairs} pairs</span></div>`).join("")
@@ -927,10 +937,10 @@
     const vis = agg.pairs.slice(0, 20);
     const maxLiq = Math.max(...vis.map((p) => p.liq || 0), 1);
     $("#poolsTable").querySelector("tbody").innerHTML = vis.map((p) => `
-      <tr><td><strong>${p.pair}</strong></td><td>${dexCell(p.dex)}</td><td>${liqBar(p.liq, maxLiq)}</td>
+      <tr><td><strong>${esc(p.pair)}</strong></td><td>${dexCell(p.dex)}</td><td>${liqBar(p.liq, maxLiq)}</td>
       <td>${fmt.usdx(p.vol24)}</td><td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td>
       <td><span class="up">${p.buys24 == null ? "—" : p.buys24}</span> / <span class="down">${p.sells24 == null ? "—" : p.sells24}</span></td>
-      <td><a href="${p.url}" target="_blank" rel="noopener">View ↗</a></td></tr>`).join("")
+      <td><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">View ↗</a></td></tr>`).join("")
       || `<tr><td colspan="7">${dexErrHTML()}</td></tr>`;
     bindDexRetry($("#dexList"));
     bindDexRetry($("#poolsTable"));
@@ -975,7 +985,7 @@
     _stake = res.rows;
     _stakeAt = res.fetchedAt;
     _stakeQ = $("#stakeSearch") ? $("#stakeSearch").value : "";
-    if (sn) sn.textContent = `registered pools ranked by active stake · Koios · updated ${fmt.timeAgo(_stakeAt)}`;
+    if (sn) sn.textContent = `registered pools ranked by active stake · Koios · updated ${fmt.timeAgo(_stakeAt)}${res.stale ? " · stale snapshot (live Koios unreachable)" : ""}`;
     paintStaking();
   }
 
@@ -1006,7 +1016,7 @@
       pstat("Avg margin", avgMargin != null ? (avgMargin * 100).toFixed(1) + "%" : "—", "of ranked pools") +
       pstat("Ranked active stake", adaCell(totStake), "combined · top pools");
     $("#stakePoolsTable").querySelector("tbody").innerHTML = rows.map((r) => `
-      <tr><td><strong>${r.ticker || "—"}</strong><br>
+      <tr><td><strong>${esc(r.ticker || "—")}</strong><br>
         <span class="muted" title="${r.poolId}">${r.poolId.slice(0, 14)}…</span></td>
       <td>${adaCell(r.activeStake)}</td>
       <td>${satCell(r.saturation)}</td>
@@ -1075,7 +1085,7 @@
     _gov = res;
     _govAt = res.fetchedAt;
     _govQ = $("#govSearch") ? $("#govSearch").value : "";
-    if (note) note.textContent = `on-chain governance actions · Koios · updated ${fmt.timeAgo(_govAt)}`;
+    if (note) note.textContent = `on-chain governance actions · Koios · updated ${fmt.timeAgo(_govAt)}${res.stale ? " · stale snapshot (live Koios unreachable)" : ""}`;
     paintGovernance();
   }
 
@@ -1096,16 +1106,16 @@
       pstat("Top-100 DRep power", adaCell(totPower), "combined voting stake");
     $("#govActive").innerHTML = active.length ? active.map((p) => `
       <div class="stat-card">
-        <div class="stat-label">${p.type} · <span class="${govStatusCls(p.status)}">${p.status}</span></div>
-        <div style="font-size:13px;margin:6px 0" title="${p.id}">${govIdShort(p.id)}</div>
+        <div class="stat-label">${esc(p.type)} · <span class="${govStatusCls(p.status)}">${esc(p.status)}</span></div>
+        <div style="font-size:13px;margin:6px 0" title="${esc(p.id)}">${govIdShort(p.id)}</div>
         <div class="stat-sub">proposed epoch ${p.proposedEpoch} · expires epoch ${p.expiration}${p.deposit != null ? " · deposit " + fmt.ada(p.deposit / 1e6) : ""}</div>
         <div style="margin-top:8px">${tallyBar(p.tally)}</div>
         <div class="stat-sub" style="margin-top:4px">${p.tally ? `Yes ${p.tally.yes} · No ${p.tally.no} · Abstain ${p.tally.abstain}` : "vote tally unavailable"}</div>
       </div>`).join("")
       : `<div class="empty" style="grid-column:1/-1">${q ? "No active actions match your search." : "No active governance actions right now — every recent proposal has been decided."}</div>`;
     $("#govRecentTable").querySelector("tbody").innerHTML = recent.map((p) => `
-      <tr><td><strong>${p.type}</strong><br><span class="muted" title="${p.id}">${govIdShort(p.id)}</span></td>
-      <td class="${govStatusCls(p.status)}">${p.status}</td>
+      <tr><td><strong>${esc(p.type)}</strong><br><span class="muted" title="${esc(p.id)}">${govIdShort(p.id)}</span></td>
+      <td class="${govStatusCls(p.status)}">${esc(p.status)}</td>
       <td>${p.proposedEpoch}</td>
       <td>${p.deposit != null ? adaCell(p.deposit) : "—"}</td>
       <td style="min-width:120px">${tallyBar(p.tally)}</td>
@@ -1113,7 +1123,7 @@
       || `<tr><td colspan="6"><div class="empty">No proposals match your search.</div></td></tr>`;
     $("#govDrepTable").querySelector("tbody").innerHTML = _gov.dreps.slice(0, 50).map((d, i) => `
       <tr><td class="muted">${i + 1}</td>
-      <td><span title="${d.id}">${govIdShort(d.id)}</span></td>
+      <td><span title="${esc(d.id)}">${govIdShort(d.id)}</span></td>
       <td>${adaCell(d.power)}</td>
       <td>${d.active ? '<span class="up">active</span>' : '<span class="muted">inactive</span>'}</td></tr>`).join("")
       || `<tr><td colspan="4"><div class="empty"><strong>DRep leaderboard unavailable</strong><span class="muted" style="display:block;margin-top:4px">Koios responded without any DRep entries, so voting power can't be shown right now. Use Retry above.</span></div></td></tr>`;
@@ -1155,67 +1165,72 @@
     const src = $("#mnNetSource");
     if (!host) return;
     host.innerHTML = skelCards(6);
-    const o = await LIVE.nightforgeOverview();
+    const snap = await LIVE.nightforgeOverview();
+    const o = snap && snap.overview;
     if (!o) {
       host.innerHTML = `<div class="empty" style="grid-column:1/-1;padding:18px">
-        <strong>NightForge unreachable</strong>
-        <span class="muted">Network stats retry automatically on the next refresh, or retry now. NIGHT price above still comes from CoinGecko.</span><br>
+        <strong>Midnight network stats unavailable</strong>
+        <span class="muted">The NightForge explorer API this panel used has shut down, and no saved snapshot is available. NIGHT price above still comes from CoinGecko.</span><br>
         <button class="btn btn-sm" type="button" data-retry-nightforge>Retry</button>
       </div>`;
       bindNightForgeRetry(host);
-      if (src) src.textContent = "NightForge · offline";
+      if (src) src.textContent = "offline";
       return;
     }
-    const fmtN = (n) => (n == null ? "—" : fmt.numx(n));
+    const fmtN = (n) => (n == null ? "—" : fmt.numx(Number(n)));
     const items = [
       ["Blocks", fmtN(o.blocks)],
       ["TPS", o.tps != null ? Number(o.tps).toFixed(3) : "—"],
-      ["Shielded", o.shieldedRatio != null ? (o.shieldedRatio * 100).toFixed(1) + "%" : "—"],
-      ["Avg block", o.avgBlockTime != null ? o.avgBlockTime + "s" : "—"],
+      ["Shielded", o.shieldedRatio != null ? (Number(o.shieldedRatio) * 100).toFixed(1) + "%" : "—"],
+      ["Avg block", o.avgBlockTime != null ? esc(o.avgBlockTime) + "s" : "—"],
       ["Bridge ops", fmtN(o.bridgeOps)],
-      ["Committee", o.committeeSize != null ? String(o.committeeSize) : "—"],
+      ["Committee", o.committeeSize != null ? esc(o.committeeSize) : "—"],
     ];
+    /* Never label snapshot figures "live": show the snapshot date instead. */
+    const when = snap.fetchedAt ? fmt.date(snap.fetchedAt) : "unknown date";
     host.innerHTML = items.map(([label, value]) => `
-      <div class="stat-card"><div class="stat-label">${label} · live</div>
-      <div class="stat-value">${value}</div></div>`).join("");
-    if (src) src.textContent = "NightForge · live";
+      <div class="stat-card"><div class="stat-label">${label}</div>
+      <div class="stat-value">${value}</div><div class="stat-sub">snapshot · ${when}</div></div>`).join("");
+    if (src) src.textContent = snap.stale ? `snapshot from ${when} · not live` : `snapshot · ${when}`;
   }
-  /* ——— NIGHT redemption tracker ———
-     Fixed public schedule (Glacier claim window closed Oct 20, 2025; redemption
-     thaws Dec 2025 → Dec 4, 2026; 90-day grace after). The thaw calculator is
-     pure local computation from the user's own inputs — NightDream has no
-     per-address claim API and never pretends to. */
-  const REDEEM_CLOSE = Date.UTC(2026, 11, 4);
-  const GRACE_END = Date.UTC(2027, 2, 4);
-  const THAW_DAYS = 90;
 
+  /* ——— NIGHT redemption tracker ———
+     Public schedule from midnight.gd/redeem and Midnight's token guide:
+     four 25% thaws, 90 days apart, from a randomized first day per address;
+     thawing ends Dec 4, 2026 and a 90-day grace period follows. Dates and the
+     phase logic live in ND.REDEEM / ND.redeemPhase / ND.thawSchedule
+     (js/data.js, unit-tested). The thaw calculator is pure local computation
+     from the user's own inputs — NightDream has no per-address claim API and
+     never pretends to. */
   function paintRedemption() {
     const phase = $("#redeemPhase"), stats = $("#redeemStats");
     if (!phase || !stats) return;
+    const R = ND.REDEEM;
     const now = Date.now();
     const daysTo = (t) => Math.max(0, Math.ceil((t - now) / 86400000));
     let phaseTxt, closeVal, closeSub;
-    if (now < REDEEM_CLOSE) {
+    const ph = ND.redeemPhase(now);
+    if (ph === "thaw") {
       phaseTxt = "final thaw window · Sep 6 → Dec 4, 2026";
-      closeVal = daysTo(REDEEM_CLOSE) + " days";
-      closeSub = "redemption closes Dec 4, 2026";
-    } else if (now < GRACE_END) {
-      phaseTxt = "grace period · until ~Mar 4, 2027";
-      closeVal = daysTo(GRACE_END) + " days";
+      closeVal = daysTo(R.thawEnd) + " days";
+      closeSub = "thawing ends Dec 4, 2026";
+    } else if (ph === "grace") {
+      phaseTxt = "grace period · portal open until ~Mar 4, 2027";
+      closeVal = daysTo(R.graceEnd) + " days";
       closeSub = "grace period ends ~Mar 4, 2027";
     } else {
-      phaseTxt = "redemption ended";
+      phaseTxt = "portal grace period over";
       closeVal = "ended";
-      closeSub = "redemption + grace period over";
+      closeSub = "NIGHT stays redeemable via the redemption contracts";
     }
     phase.textContent = phaseTxt;
     const card = (label, value, sub) =>
       `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div><div class="stat-sub">${sub}</div></div>`;
     stats.innerHTML =
-      card("Redemption closes", closeVal, closeSub) +
-      card("Grace period ends", "~Mar 4, 2027", "90 days after close") +
+      card(ph === "thaw" ? "Thawing ends" : "Portal closes", closeVal, closeSub) +
+      card("Grace period ends", "~Mar 4, 2027", "90 days after thawing ends") +
       card("Thaw model", "4 × 25%", "90 days apart") +
-      card("Lost-and-Found", "~252M NIGHT", "for eligible non-claimants");
+      card("Final window", "Thaw 4", R.windows[3][1]);
     try {
       const a = localStorage.getItem("nd.redeem.alloc"), f = localStorage.getItem("nd.redeem.first");
       if (a && $("#redeemAlloc") && !$("#redeemAlloc").value) $("#redeemAlloc").value = a;
@@ -1232,23 +1247,17 @@
       tb.innerHTML = `<tr><td colspan="4"><div class="empty">Enter your allocation and first thaw date to build your schedule.</div></td></tr>`;
       return;
     }
-    const d0 = new Date(first + "T00:00:00");
-    if (Number.isNaN(d0.getTime())) {
+    const rows = ND.thawSchedule(alloc, first);
+    if (!rows) {
       tb.innerHTML = `<tr><td colspan="4"><div class="empty">That date doesn't look valid — check the first-thaw field.</div></td></tr>`;
       return;
     }
     const now = Date.now();
-    let html = "";
-    for (let i = 0; i < 4; i++) {
-      const d = new Date(d0);
-      d.setDate(d.getDate() + i * THAW_DAYS);
-      const past = d.getTime() <= now;
-      html += `<tr><td>${i + 1} of 4</td>` +
-        `<td>${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>` +
-        `<td>${fmt.numx(Math.round((alloc / 4) * 100) / 100)} NIGHT</td>` +
-        `<td>${past ? '<span class="up">thawed</span>' : '<span class="muted">upcoming</span>'}</td></tr>`;
-    }
-    tb.innerHTML = html;
+    tb.innerHTML = rows.map((r) =>
+      `<tr><td>${r.n} of 4</td>` +
+      `<td>${new Date(r.at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</td>` +
+      `<td>${fmt.numx(Math.round(r.amount * 100) / 100)} NIGHT</td>` +
+      `<td>${r.at <= now ? '<span class="up">thawed</span>' : '<span class="muted">upcoming</span>'}</td></tr>`).join("");
   }
 
   async function drawNightChart(range) {
@@ -1289,11 +1298,11 @@
     if (!ids.length) { tb.innerHTML = ""; empty.style.display = "block"; return; }
     empty.style.display = "none";
     tb.innerHTML = ids.map((t) => `
-      <tr><td><button class="star-btn on" data-star="${t.ticker}" type="button" aria-pressed="true" aria-label="Toggle watchlist for ${t.ticker}">★</button></td>
-      <td><a class="token-cell row-link" href="#token/${t.ticker}">${icon(t, 1)}<div class="token-meta"><strong>${t.ticker}</strong><span>${t.name}</span></div></a></td>
+      <tr><td><button class="star-btn on" data-star="${esc(t.ticker)}" type="button" aria-pressed="true" aria-label="Toggle watchlist for ${esc(t.ticker)}">★</button></td>
+      <td><a class="token-cell row-link" href="#token/${esc(t.ticker)}">${icon(t, 1)}<div class="token-meta"><strong>${esc(t.ticker)}</strong><span>${esc(t.name)}</span></div></a></td>
       <td>${fmt.prx(t.price, 6)}</td><td class="${chClass(t.ch24)}">${fmt.pct(t.ch24)}</td>
       <td>${fmt.usdx(t.vol)}</td><td>${fmt.usdx(t.mcap)}</td>
-      <td><a class="btn btn-sm" href="#token/${t.ticker}">Open</a></td></tr>`).join("");
+      <td><a class="btn btn-sm" href="#token/${esc(t.ticker)}">Open</a></td></tr>`).join("");
     tb.querySelectorAll("[data-star]").forEach((b) => b.addEventListener("click", () => toggleWatch(b.dataset.star)));
   }
 
@@ -1337,8 +1346,8 @@
     items = items.slice(0, 20);
     const list = $("#cmdkList");
     list.innerHTML = items.length ? items.map((i, idx) => `
-      <div class="cmdk-item ${idx === 0 ? "active" : ""}" role="option" id="cmdk-item-${idx}" aria-selected="${idx === 0 ? "true" : "false"}" data-hash="${i.hash}">
-        <span>${i.label}</span><span class="hint">${i.hint || ""}</span></div>`).join("")
+      <div class="cmdk-item ${idx === 0 ? "active" : ""}" role="option" id="cmdk-item-${idx}" aria-selected="${idx === 0 ? "true" : "false"}" data-hash="${esc(i.hash)}">
+        <span>${esc(i.label)}</span><span class="hint">${i.hint || ""}</span></div>`).join("")
       : `<div class="cmdk-empty">No matches</div>`;
     list.querySelectorAll(".cmdk-item").forEach((el) =>
       el.addEventListener("click", () => { closeCmdk(); navigate(el.dataset.hash); }));

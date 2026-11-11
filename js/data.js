@@ -5,14 +5,76 @@ window.ND = window.ND || {};
 ND.META = {
   live: true,
   network: "Cardano mainnet",
-  sources: ["CoinGecko", "DexScreener", "Koios", "MinSwap"],
+  sources: ["CoinGecko", "DexScreener", "GeckoTerminal", "Koios", "MinSwap"],
 };
 
 /* Midnight economics (documented concepts — model inputs, not market data) */
 ND.MIDNIGHT = {
   dustPerNightMax: 5,
   generationNote: "Each NIGHT can sustain up to 5 DUST capacity. Generation rate depends on holdings and Midnight network parameters (model estimates).",
-  bridgeNote: "Cardano hosts NIGHT; Midnight uses DUST for shielded tx fees. A bridge moves value Cardano ↔ Midnight while preserving the NIGHT→DUST generation model.",
+  bridgeNote: "Cardano hosts NIGHT (cNIGHT); registering it lets your Midnight address generate DUST, which pays for shielded transactions. A two-way NIGHT token bridge is planned but not live on mainnet yet, so this diagram is a mental model, not a working route.",
+};
+
+/* ——— Output safety ———
+   Token names, tickers, NFT names, pair labels and wallet names come from
+   third-party feeds and from on-chain metadata that anyone can mint, so every
+   such string is escaped before it is placed into innerHTML, and every
+   external link goes through safeUrl (http/https only). */
+ND.esc = function (v) {
+  return String(v == null ? "" : v)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/`/g, "&#96;");
+};
+ND.safeUrl = function (u) {
+  try {
+    const url = new URL(String(u || ""), "https://nightdream.xyz/");
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch (_) { return ""; }
+};
+/* Image sources: https URLs and inline raster data: URIs only (wallet icons
+   are usually data: URIs; SVG data URIs are allowed because <img> never runs
+   their scripts). */
+ND.safeImg = function (u) {
+  const s = String(u || "");
+  if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(s)) return s;
+  const h = ND.safeUrl(s);
+  return h.startsWith("https:") ? h : "";
+};
+
+/* NIGHT redemption schedule (midnight.gd/redeem, Midnight token guide).
+   Thawing ends on Dec 4, 2026; the redemption portal stays open for a
+   90-day grace period after that. Timestamps mark the END of each day in UTC
+   so the countdown never flips to "ended" while it is still Dec 4 somewhere. */
+ND.REDEEM = {
+  thawEnd: Date.UTC(2026, 11, 5),     // end of Dec 4, 2026 (UTC)
+  graceEnd: Date.UTC(2027, 2, 5),     // end of ~Mar 4, 2027 (UTC) — 90 days after
+  thawDays: 90,
+  windows: [
+    ["Thaw 1", "Dec 10, 2025 – Mar 9, 2026"],
+    ["Thaw 2", "Mar 10 – Jun 7, 2026"],
+    ["Thaw 3", "Jun 8 – Sep 5, 2026"],
+    ["Thaw 4", "Sep 6 – Dec 4, 2026"],
+  ],
+};
+/* Pure phase function (unit-tested in tests/). */
+ND.redeemPhase = function (now) {
+  const R = ND.REDEEM;
+  if (now < R.thawEnd) return "thaw";
+  if (now < R.graceEnd) return "grace";
+  return "ended";
+};
+/* Pure schedule builder: 4 equal tranches, 90 days apart from the first
+   thaw date the user reads off the official portal. */
+ND.thawSchedule = function (alloc, firstIso) {
+  if (!(alloc > 0) || !firstIso || !/^\d{4}-\d{2}-\d{2}$/.test(firstIso)) return null;
+  const [y, m, d] = firstIso.split("-").map(Number);
+  const t0 = Date.UTC(y, m - 1, d);
+  if (Number.isNaN(t0)) return null;
+  const out = [];
+  for (let i = 0; i < 4; i++) {
+    out.push({ n: i + 1, at: t0 + i * ND.REDEEM.thawDays * 86400000, amount: alloc / 4 });
+  }
+  return out;
 };
 
 /* Live token list (filled by ND.ensureMarkets) */

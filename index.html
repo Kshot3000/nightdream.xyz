@@ -376,7 +376,7 @@
           <div class="page-head">
             <div>
               <h1>Midnight</h1>
-              <p class="muted">NIGHT · live network · DUST model · bridge mental model</p>
+              <p class="muted">NIGHT · network snapshot · DUST model · bridge mental model</p>
             </div>
           </div>
           <div class="midnight-hero">
@@ -387,9 +387,9 @@
           <div class="panel" style="margin-bottom:12px" id="mnRedeemPanel">
             <div class="panel-head"><h2>NIGHT redemption</h2><span class="muted" id="redeemPhase"></span></div>
             <p class="muted" style="font-size:13px;margin:0 0 12px;max-width:840px;line-height:1.55">
-              The Glacier claim window closed Oct 20, 2025. Claimants' NIGHT unlocks in four 25% thaws, 90 days apart —
-              we're in the final window now. Missed the claim? A ~252M NIGHT Lost-and-Found phase covers eligible users
-              who didn't claim in time. NightDream can't see your claim — exact dates live in the official portal.
+              Claimed NIGHT (Glacier Drop and Scavenger Mine) unlocks in four 25% thaws, 90 days apart, starting from a
+              random first day assigned to each destination address. Thawing ends Dec 4, 2026; a 90-day grace period follows
+              for final redemptions through the portal. NightDream can't see your claim — exact dates live in the official portal.
             </p>
             <div class="stat-grid" id="redeemStats"></div>
             <div style="margin-top:12px">
@@ -412,7 +412,7 @@
               </div>
               <p class="muted" style="font-size:12px;margin:8px 0 0">Computed locally from your inputs and saved in this browser only.
                 Confirm exact dates at the official portal:
-                <a href="https://www.midnight.gd/how-to-get-night" target="_blank" rel="noopener">midnight.gd/how-to-get-night</a>.</p>
+                <a href="https://www.midnight.gd/redeem" target="_blank" rel="noopener">midnight.gd/redeem</a>.</p>
             </div>
           </div>
           <div style="margin-bottom:12px">
@@ -457,12 +457,13 @@
           <div class="panel" style="margin-top:12px" id="mnNetPanel">
             <div class="panel-head">
               <h2>Midnight network</h2>
-              <span class="muted" id="mnNetSource">NightForge explorer</span>
+              <span class="muted" id="mnNetSource">snapshot</span>
             </div>
             <div class="stat-grid" id="mnNetStats"></div>
             <p class="muted" style="font-size:12px;margin:10px 0 0">
-              Live from the public <a href="https://nightforge.jp/api/docs" target="_blank" rel="noopener">NightForge API</a>
-              · falls back to a soft empty state if unreachable
+              Last saved snapshot from the NightForge explorer API, which has since shut down — these figures are not live.
+              Midnight's public mainnet indexer now runs on <a href="https://docs.midnight.network/relnotes/network" target="_blank" rel="noopener">Blockfrost</a>
+              and needs a project token, so live stats will return once a server-side snapshot job is set up (docs/SNAPSHOTS.md).
             </p>
           </div>
           <div class="panel" style="margin-top:12px">
@@ -540,7 +541,9 @@
 
   <script src="./js/charts.js?v=20261002b"></script>
   <script src="./js/tokens.js?v=20260929a"></script>
-  <script src="./js/live.js?v=20261002b"></script>
+  <!-- optional, gitignored runtime config (see js/config.example.js); a 404 here is expected and harmless -->
+  <script src="./js/config.local.js"></script>
+  <script src="./js/live.js?v=20261110a"></script>
   <script src="./js/data.js?v=20261001a"></script>
   <script src="./js/wallet.js?v=20261001d"></script>
   <script src="./js/app.js?v=20261017a"></script>

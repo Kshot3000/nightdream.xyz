@@ -1,7 +1,7 @@
 /* NightDream — live data layer.
    Sources (all keyless, CORS-open, verified 2026-09-26):
    - CoinGecko  /api/v3            → prices, mcap, volume, charts, OHLC, metadata
-     (x_cg_demo_api_key query param; keyed requests pass CG's edge protection)
+     (keyless by default; optional runtime key, see cgKey below)
    - DexScreener /latest/dex       → DEX pairs, buys/sells, liquidity —
      SundaeSwap, WingRiders and other indexed venues on Cardano
    - GeckoTerminal /api/v2         → Minswap pools on Cardano (DexScreener
@@ -11,20 +11,32 @@
      for ADA) so the site never goes blank on a single feed failure.
    - Koios      /api/v1            → on-chain asset info, holders, address/wallet data
    - MinSwap aggregator            → ADA/USD reference price
-   - NightForge mainnet.nightforge.jp → Midnight network analytics
+   - Midnight network strip: same-origin snapshot only. NightForge
+     (mainnet.nightforge.jp) answers 410 Gone, and Midnight's own mainnet
+     indexer was retired on Oct 9, 2026 in favour of Blockfrost, which needs
+     a project token that must never ship in browser code.
    Every fetch is cached (memory + localStorage) and fails soft → null.
    UI must always handle null with skeletons / error states + retry. */
 window.LIVE = (function () {
   const CG = "https://api.coingecko.com/api/v3";
-  /* CoinGecko demo API key (Kyle's, free tier). Appended as a query parameter on
-     every CG request — NOT as a header: a custom header triggers a CORS
-     preflight (OPTIONS), which CoinGecko's edge 403s on exactly the networks
-     this key is meant to reach through. Keyed requests pass the edge
-     protection that 403s anonymous calls from many networks. NOTE: this is a
-     client-side static site, so the key is visible in the served JS by design;
-     it's a free key with no billing attached — rotate it in the CoinGecko
-     dashboard if the quota ever gets abused. */
-  const CG_DEMO_KEY = "CG-LWf3eRkt8KF6e95Fm9ELa3EF";
+  /* CoinGecko key: optional, never committed. Requests go keyless to the
+     public API by default. A deployer who wants a CoinGecko demo key sets it
+     at runtime in js/config.local.js (gitignored; copy js/config.example.js):
+       window.ND_CONFIG = { coingeckoDemoKey: "CG-..." };
+     It is sent as the x_cg_demo_api_key query param, not a header, because a
+     custom header triggers a CORS preflight that CoinGecko's edge rejects.
+     Anything served to browsers is public, so only use a free key with no
+     billing attached. If a keyed request is refused (bad or revoked key) we
+     retry once keyless, and if CoinGecko is unreachable the DexScreener
+     fallback feed fills the table. */
+  const cgKey = function () {
+    const k = window.ND_CONFIG && window.ND_CONFIG.coingeckoDemoKey;
+    return typeof k === "string" && /^CG-[A-Za-z0-9]{8,64}$/.test(k) ? k : "";
+  };
+  const withCgKey = function (url) {
+    const k = cgKey();
+    return k ? url + (url.indexOf("?") === -1 ? "?" : "&") + "x_cg_demo_api_key=" + encodeURIComponent(k) : url;
+  };
   const KOIOS = "https://api.koios.rest/api/v1";
   const DEXS = "https://api.dexscreener.com";
   const GT = "https://api.geckoterminal.com/api/v2";
@@ -70,11 +82,11 @@ window.LIVE = (function () {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout || 20000);
     try {
-      const fetchUrl =
-        url.indexOf(CG) === 0
-          ? url + (url.indexOf("?") === -1 ? "?" : "&") + "x_cg_demo_api_key=" + CG_DEMO_KEY
-          : url;
-      const r = await fetch(fetchUrl, { ...fetchInit, signal: ctrl.signal });
+      const isCg = url.indexOf(CG) === 0;
+      let r = await fetch(isCg ? withCgKey(url) : url, { ...fetchInit, signal: ctrl.signal });
+      /* keyed CG request refused (bad/revoked/over-quota key) → one keyless retry */
+      if (isCg && cgKey() && (r.status === 400 || r.status === 401 || r.status === 403 || r.status === 429))
+        r = await fetch(url, { ...fetchInit, signal: ctrl.signal });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       cacheSet(url, j, ttlMs);
@@ -395,19 +407,22 @@ window.LIVE = (function () {
   /* ——— Same-origin snapshots (primary) ———
      Koios and NightForge don't send Access-Control-Allow-Origin on GET
      responses, so browsers block cross-origin fetch() from this site. A
-     scheduled GitHub Actions workflow (see .github/workflows/snapshots.yml
-     and scripts/koios-snapshot.mjs) fetches the bulk datasets server-side
-     every 6 hours into data/snapshots/, which loads same-origin with no
-     CORS issue. Snapshots older than 36h are ignored; the live-fetch path
-     below remains as a fallback. */
+     scheduled job (scripts/koios-snapshot.mjs; see docs/SNAPSHOTS.md) fetches
+     the bulk datasets server-side into data/snapshots/, which loads
+     same-origin with no CORS issue. Snapshots older than 36h are treated as
+     stale: the live-fetch path is tried first, and if that fails too the
+     stale snapshot is shown with stale: true so the UI can show its real age
+     instead of a blank panel. */
   const SNAP_MAX_AGE = 36 * 3600 * 1000;
-  async function snapshot(path) {
+  async function snapshot(path, opts) {
     try {
       const r = await fetch(path, { cache: "no-store" });
       if (!r.ok) return null;
       const j = await r.json();
-      if (!j || !j.fetchedAt || Date.now() - j.fetchedAt > SNAP_MAX_AGE) return null;
-      return j;
+      if (!j || !j.fetchedAt) return null;
+      const stale = Date.now() - j.fetchedAt > SNAP_MAX_AGE;
+      if (stale && !(opts && opts.allowStale)) return null;
+      return stale ? Object.assign({}, j, { stale: true }) : j;
     } catch { return null; }
   }
 
@@ -428,9 +443,16 @@ window.LIVE = (function () {
   }
 
   async function koiosPools(limit = 150) {
-    // Primary: same-origin snapshot (no CORS issues, refreshed every 6h)
+    // Primary: fresh same-origin snapshot (no CORS issues)
     const snap = await snapshot("data/snapshots/pools.json");
     if (snap && Array.isArray(snap.rows) && snap.rows.length) return snap;
+    const live = await koiosPoolsLive(limit).catch(() => null);
+    if (live) return live;
+    // Last resort: a stale snapshot (UI shows its real age)
+    const old = await snapshot("data/snapshots/pools.json", { allowStale: true });
+    return old && Array.isArray(old.rows) && old.rows.length ? old : null;
+  }
+  async function koiosPoolsLive(limit) {
     // Fallback: live Koios fetch (may be CORS-blocked in some browsers)
     const list = await bulkGet(
       `${KOIOS}/pool_list?select=pool_id_bech32,ticker,margin,active_stake,pool_status,retiring_epoch,pledge,fixed_cost`,
@@ -498,14 +520,15 @@ window.LIVE = (function () {
 
   /* ——— Midnight network (NightForge explorer) ——— */
   const NF = "https://mainnet.nightforge.jp/api";
+  /* Returns { overview, fetchedAt, stale? } or null. No live fallback: the
+     NightForge API is gone (HTTP 410) — calling it only adds a failed request. */
   async function nightforgeOverview() {
-    // Primary: same-origin snapshot (NightForge sends no CORS headers at all)
-    const snap = await snapshot("data/snapshots/midnight.json");
-    if (snap && snap.overview) return snap.overview;
-    return jget(`${NF}/analytics/overview`, 60 * 1000);
+    const snap = await snapshot("data/snapshots/midnight.json", { allowStale: true });
+    return snap && snap.overview ? snap : null;
   }
   async function nightforgeHealth() {
-    return jget(`${NF}/health`, 60 * 1000);
+    const snap = await snapshot("data/snapshots/midnight.json", { allowStale: true });
+    return snap ? snap.health || null : null;
   }
 
   /* ——— Governance (Koios) ——— */
@@ -527,9 +550,16 @@ window.LIVE = (function () {
   }
 
   async function koiosGovernance() {
-    // Primary: same-origin snapshot (no CORS issues, refreshed every 6h)
+    // Primary: fresh same-origin snapshot (no CORS issues)
     const snap = await snapshot("data/snapshots/governance.json");
     if (snap && Array.isArray(snap.proposals) && snap.proposals.length) return snap;
+    const live = await koiosGovernanceLive();
+    if (live) return live;
+    // Last resort: a stale snapshot (UI shows its real age)
+    const old = await snapshot("data/snapshots/governance.json", { allowStale: true });
+    return old && Array.isArray(old.proposals) && old.proposals.length ? old : null;
+  }
+  async function koiosGovernanceLive() {
     // Fallback: live Koios fetch (may be CORS-blocked in some browsers)
     // Each underlying request is cached 12h by jget/jpost, so repeat visits
     // re-aggregate from localStorage without new network traffic.
