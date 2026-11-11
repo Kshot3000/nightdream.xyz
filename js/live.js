@@ -11,7 +11,10 @@
      for ADA) so the site never goes blank on a single feed failure.
    - Koios      /api/v1            → on-chain asset info, holders, address/wallet data
    - MinSwap aggregator            → ADA/USD reference price
-   - NightForge mainnet.nightforge.jp → Midnight network analytics
+   - Midnight network strip: same-origin snapshot only. NightForge
+     (mainnet.nightforge.jp) answers 410 Gone, and Midnight's own mainnet
+     indexer was retired on Oct 9, 2026 in favour of Blockfrost, which needs
+     a project token that must never ship in browser code.
    Every fetch is cached (memory + localStorage) and fails soft → null.
    UI must always handle null with skeletons / error states + retry. */
 window.LIVE = (function () {
@@ -395,19 +398,22 @@ window.LIVE = (function () {
   /* ——— Same-origin snapshots (primary) ———
      Koios and NightForge don't send Access-Control-Allow-Origin on GET
      responses, so browsers block cross-origin fetch() from this site. A
-     scheduled GitHub Actions workflow (see .github/workflows/snapshots.yml
-     and scripts/koios-snapshot.mjs) fetches the bulk datasets server-side
-     every 6 hours into data/snapshots/, which loads same-origin with no
-     CORS issue. Snapshots older than 36h are ignored; the live-fetch path
-     below remains as a fallback. */
+     scheduled job (scripts/koios-snapshot.mjs; see docs/SNAPSHOTS.md) fetches
+     the bulk datasets server-side into data/snapshots/, which loads
+     same-origin with no CORS issue. Snapshots older than 36h are treated as
+     stale: the live-fetch path is tried first, and if that fails too the
+     stale snapshot is shown with stale: true so the UI can show its real age
+     instead of a blank panel. */
   const SNAP_MAX_AGE = 36 * 3600 * 1000;
-  async function snapshot(path) {
+  async function snapshot(path, opts) {
     try {
       const r = await fetch(path, { cache: "no-store" });
       if (!r.ok) return null;
       const j = await r.json();
-      if (!j || !j.fetchedAt || Date.now() - j.fetchedAt > SNAP_MAX_AGE) return null;
-      return j;
+      if (!j || !j.fetchedAt) return null;
+      const stale = Date.now() - j.fetchedAt > SNAP_MAX_AGE;
+      if (stale && !(opts && opts.allowStale)) return null;
+      return stale ? Object.assign({}, j, { stale: true }) : j;
     } catch { return null; }
   }
 
@@ -428,9 +434,16 @@ window.LIVE = (function () {
   }
 
   async function koiosPools(limit = 150) {
-    // Primary: same-origin snapshot (no CORS issues, refreshed every 6h)
+    // Primary: fresh same-origin snapshot (no CORS issues)
     const snap = await snapshot("data/snapshots/pools.json");
     if (snap && Array.isArray(snap.rows) && snap.rows.length) return snap;
+    const live = await koiosPoolsLive(limit).catch(() => null);
+    if (live) return live;
+    // Last resort: a stale snapshot (UI shows its real age)
+    const old = await snapshot("data/snapshots/pools.json", { allowStale: true });
+    return old && Array.isArray(old.rows) && old.rows.length ? old : null;
+  }
+  async function koiosPoolsLive(limit) {
     // Fallback: live Koios fetch (may be CORS-blocked in some browsers)
     const list = await bulkGet(
       `${KOIOS}/pool_list?select=pool_id_bech32,ticker,margin,active_stake,pool_status,retiring_epoch,pledge,fixed_cost`,
@@ -498,14 +511,15 @@ window.LIVE = (function () {
 
   /* ——— Midnight network (NightForge explorer) ——— */
   const NF = "https://mainnet.nightforge.jp/api";
+  /* Returns { overview, fetchedAt, stale? } or null. No live fallback: the
+     NightForge API is gone (HTTP 410) — calling it only adds a failed request. */
   async function nightforgeOverview() {
-    // Primary: same-origin snapshot (NightForge sends no CORS headers at all)
-    const snap = await snapshot("data/snapshots/midnight.json");
-    if (snap && snap.overview) return snap.overview;
-    return jget(`${NF}/analytics/overview`, 60 * 1000);
+    const snap = await snapshot("data/snapshots/midnight.json", { allowStale: true });
+    return snap && snap.overview ? snap : null;
   }
   async function nightforgeHealth() {
-    return jget(`${NF}/health`, 60 * 1000);
+    const snap = await snapshot("data/snapshots/midnight.json", { allowStale: true });
+    return snap ? snap.health || null : null;
   }
 
   /* ——— Governance (Koios) ——— */
@@ -527,9 +541,16 @@ window.LIVE = (function () {
   }
 
   async function koiosGovernance() {
-    // Primary: same-origin snapshot (no CORS issues, refreshed every 6h)
+    // Primary: fresh same-origin snapshot (no CORS issues)
     const snap = await snapshot("data/snapshots/governance.json");
     if (snap && Array.isArray(snap.proposals) && snap.proposals.length) return snap;
+    const live = await koiosGovernanceLive();
+    if (live) return live;
+    // Last resort: a stale snapshot (UI shows its real age)
+    const old = await snapshot("data/snapshots/governance.json", { allowStale: true });
+    return old && Array.isArray(old.proposals) && old.proposals.length ? old : null;
+  }
+  async function koiosGovernanceLive() {
     // Fallback: live Koios fetch (may be CORS-blocked in some browsers)
     // Each underlying request is cached 12h by jget/jpost, so repeat visits
     // re-aggregate from localStorage without new network traffic.
