@@ -25,6 +25,13 @@ ND.esc = function (v) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/`/g, "&#96;");
 };
+/* Numeric feed field → safe display text: only a finite number is rendered,
+   anything else (a string, an object, NaN) becomes the fallback. Keeps
+   API-supplied fields like decimals or txn counts out of innerHTML as markup. */
+ND.numText = function (v, fallback) {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) ? String(n) : fallback == null ? "\u2014" : String(fallback);
+};
 ND.safeUrl = function (u) {
   try {
     const url = new URL(String(u || ""), "https://nightdream.xyz/");

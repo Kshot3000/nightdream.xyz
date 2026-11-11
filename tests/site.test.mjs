@@ -182,3 +182,23 @@ test("a malformed runtime key is ignored", async () => {
   await LIVE.adaPrice();
   assert.ok(!calls.some((u) => u.includes("evil")));
 });
+
+test("numText() renders only finite numbers", () => {
+  const ND = loadND();
+  assert.equal(ND.numText(6), "6");
+  assert.equal(ND.numText("18"), "18");
+  assert.equal(ND.numText(0), "0");
+  assert.equal(ND.numText(null), "\u2014");
+  assert.equal(ND.numText(undefined), "\u2014");
+  assert.equal(ND.numText("<img src=x onerror=alert(1)>"), "\u2014");
+  assert.equal(ND.numText({ toString: () => "<b>" }), "\u2014");
+  assert.equal(ND.numText(NaN), "\u2014");
+  assert.equal(ND.numText(Infinity), "\u2014");
+  assert.equal(ND.numText("", "n/a"), "n/a");
+});
+
+test("decimals and DexScreener txn counts never reach innerHTML raw (lint)", () => {
+  const app = read("js/app.js");
+  assert.ok(!/\$\{\s*meta\.decimals\b/.test(app) && !/\?\s*meta\.decimals\s*:/.test(app), "raw meta.decimals");
+  assert.ok(!/(\$\{|\?|:)\s*p\.(buys|sells)24\b(?!\))/.test(app.replace(/numText\(p\.(buys|sells)24\)/g, "")), "raw buys24/sells24");
+});

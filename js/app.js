@@ -4,7 +4,7 @@
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
   const fmt = ND.fmt;
-  const esc = ND.esc, safeUrl = ND.safeUrl, safeImg = ND.safeImg;
+  const esc = ND.esc, safeUrl = ND.safeUrl, safeImg = ND.safeImg, numText = ND.numText;
   const chClass = (n) => (n > 0 ? "up" : n < 0 ? "down" : "flat");
   const watch = new Set(JSON.parse(localStorage.getItem("nd.watch") || "[]"));
   const chartRanges = { ADA: "30D", NIGHT: "30D", TOKEN: "7D" };
@@ -621,7 +621,7 @@
       $("#tokenOnchain").innerHTML = `
         <div class="kv"><span>Policy ID</span><button class="asset-id" data-copy="${esc(t.policy)}" title="${esc(t.policy)}">${esc(fmt.hexShort(t.policy, 16))}</button></div>
         <div class="kv"><span>Fingerprint</span><code style="font-size:11px"${info.fingerprint ? ` title="${esc(info.fingerprint)}"` : ""}>${info.fingerprint ? esc(fmt.hexShort(String(info.fingerprint), 16)) : "—"}</code></div>
-        <div class="kv"><span>Decimals</span><span>${meta.decimals != null ? meta.decimals : "—"}</span></div>
+        <div class="kv"><span>Decimals</span><span>${numText(meta.decimals)}</span></div>
         <div class="kv"><span>Total supply</span><span>${fmt.numx(Number(info.total_supply) / Math.pow(10, dec))}</span></div>
         <div class="kv"><span>Explorer</span><a href="https://cardanoscan.io/token/${encodeURIComponent(t.unit || "")}" target="_blank" rel="noopener">Cardanoscan ↗</a></div>`;
       const cp = $("#tokenOnchain [data-copy]");
@@ -663,7 +663,7 @@
         <td>${p.priceUsd ? fmt.prx(p.priceUsd, 6) : "—"}</td>
         <td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td>
         <td>${fmt.usdx(p.vol24)}</td><td>${fmt.usdx(p.liq)}</td>
-        <td><span class="up">${p.buys24 == null ? "—" : p.buys24}</span> / <span class="down">${p.sells24 == null ? "—" : p.sells24}</span></td>
+        <td><span class="up">${numText(p.buys24)}</span> / <span class="down">${numText(p.sells24)}</span></td>
         <td><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">Trade ↗</a></td></tr>`).join("");
     });
   }
@@ -685,7 +685,7 @@
       return;
     }
     let buys = 0, sells = 0, vol = 0;
-    adaPairs.forEach((p) => { buys += p.buys24 || 0; sells += p.sells24 || 0; vol += p.vol24 || 0; });
+    adaPairs.forEach((p) => { buys += Number(p.buys24) || 0; sells += Number(p.sells24) || 0; vol += Number(p.vol24) || 0; });
     const tot = buys + sells;
     const bp = tot ? (buys / tot) * 100 : 50;
     if (bs) bs.innerHTML = `
@@ -701,7 +701,7 @@
       <td>${p.priceUsd ? fmt.prx(p.priceUsd, 6) : "—"}</td>
       <td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td>
       <td>${fmt.usdx(p.vol24)}</td><td>${fmt.usdx(p.liq)}</td>
-      <td><span class="up">${p.buys24 == null ? "—" : p.buys24}</span> / <span class="down">${p.sells24 == null ? "—" : p.sells24}</span></td>
+      <td><span class="up">${numText(p.buys24)}</span> / <span class="down">${numText(p.sells24)}</span></td>
       <td><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">Trade ↗</a></td></tr>`).join("");
   }
 
@@ -939,7 +939,7 @@
     $("#poolsTable").querySelector("tbody").innerHTML = vis.map((p) => `
       <tr><td><strong>${esc(p.pair)}</strong></td><td>${dexCell(p.dex)}</td><td>${liqBar(p.liq, maxLiq)}</td>
       <td>${fmt.usdx(p.vol24)}</td><td class="${chClass(p.ch24)}">${fmt.pct(p.ch24)}</td>
-      <td><span class="up">${p.buys24 == null ? "—" : p.buys24}</span> / <span class="down">${p.sells24 == null ? "—" : p.sells24}</span></td>
+      <td><span class="up">${numText(p.buys24)}</span> / <span class="down">${numText(p.sells24)}</span></td>
       <td><a href="${esc(safeUrl(p.url))}" target="_blank" rel="noopener">View ↗</a></td></tr>`).join("")
       || `<tr><td colspan="7">${dexErrHTML()}</td></tr>`;
     bindDexRetry($("#dexList"));
