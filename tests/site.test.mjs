@@ -82,7 +82,8 @@ test("local assets referenced by index.html exist", () => {
   const html = read("index.html");
   const refs = [...html.matchAll(/(?:src|href)="(\.?\/?(?:assets|css|js|data)\/[^"?#]+)"/g)].map((m) => m[1]);
   assert.ok(refs.length > 5);
-  for (const r of refs) assert.ok(existsSync(join(ROOT, r.replace(/^\.?\//, ""))), `missing ${r}`);
+  const OPTIONAL = new Set(["./js/config.local.js"]); // gitignored runtime config
+  for (const r of refs) if (!OPTIONAL.has(r)) assert.ok(existsSync(join(ROOT, r.replace(/^\.?\//, ""))), `missing ${r}`);
   for (const f of ["CNAME", "ads.txt", ".nojekyll", "LICENSE"]) assert.ok(existsSync(join(ROOT, f)), f);
 });
 
@@ -123,4 +124,61 @@ test("wallet install links are https", () => {
   const w = read("js/wallet.js");
   const block = w.slice(w.indexOf("const INSTALL"), w.indexOf("};", w.indexOf("const INSTALL")));
   for (const m of block.matchAll(/"(https?:[^"]+)"/g)) assert.ok(m[1].startsWith("https://"), m[1]);
+});
+
+// ---- CoinGecko key handling (js/live.js) ----
+function loadLive(config, respond) {
+  const calls = [];
+  const ctx = {
+    URL, AbortController, setTimeout, clearTimeout, console,
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    fetch: async (url) => {
+      calls.push(String(url));
+      const res = respond(String(url), calls.length);
+      return { ok: res.status === 200, status: res.status, json: async () => res.body };
+    },
+  };
+  ctx.window = ctx;
+  if (config) ctx.ND_CONFIG = config;
+  vm.createContext(ctx);
+  vm.runInContext(read("js/live.js"), ctx);
+  return { LIVE: ctx.LIVE, calls };
+}
+const cgOk = { status: 200, body: { cardano: { usd: 0.5, usd_24h_change: 1 } } };
+const minswapDown = { status: 503, body: null };
+
+test("no CoinGecko key is committed in js/", () => {
+  for (const f of readdirSync(join(ROOT, "js")).filter((f) => f.endsWith(".js") && f !== "config.local.js")) {
+    assert.ok(!/CG-[A-Za-z0-9]{12,}/.test(read("js/" + f)), `key-like string in js/${f}`);
+  }
+  assert.ok(!existsSync(join(ROOT, "js/config.local.js")) || read(".gitignore").includes("js/config.local.js"));
+});
+
+test("CoinGecko requests are keyless by default", async () => {
+  const { LIVE, calls } = loadLive(null, (u) => (u.includes("coingecko") ? cgOk : minswapDown));
+  assert.equal((await LIVE.adaPrice()).price, 0.5);
+  const cg = calls.filter((u) => u.includes("coingecko"));
+  assert.equal(cg.length, 1);
+  assert.ok(!cg[0].includes("x_cg_demo_api_key"));
+});
+
+test("an optional runtime key is appended, and a refused key retries keyless", async () => {
+  const key = "CG-abcdefghijklmnop";
+  const ok = loadLive({ coingeckoDemoKey: key }, (u) => (u.includes("coingecko") ? cgOk : minswapDown));
+  await ok.LIVE.adaPrice();
+  assert.ok(ok.calls.some((u) => u.includes("x_cg_demo_api_key=" + key)));
+
+  const bad = loadLive({ coingeckoDemoKey: key }, (u) =>
+    !u.includes("coingecko") ? minswapDown : u.includes("x_cg_demo_api_key") ? { status: 401, body: null } : cgOk,
+  );
+  assert.equal((await bad.LIVE.adaPrice()).price, 0.5);
+  const cg = bad.calls.filter((u) => u.includes("coingecko"));
+  assert.equal(cg.length, 2);
+  assert.ok(!cg[1].includes("x_cg_demo_api_key"));
+});
+
+test("a malformed runtime key is ignored", async () => {
+  const { LIVE, calls } = loadLive({ coingeckoDemoKey: "x\"&evil=1" }, (u) => (u.includes("coingecko") ? cgOk : minswapDown));
+  await LIVE.adaPrice();
+  assert.ok(!calls.some((u) => u.includes("evil")));
 });

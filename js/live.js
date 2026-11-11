@@ -1,7 +1,7 @@
 /* NightDream — live data layer.
    Sources (all keyless, CORS-open, verified 2026-09-26):
    - CoinGecko  /api/v3            → prices, mcap, volume, charts, OHLC, metadata
-     (x_cg_demo_api_key query param; keyed requests pass CG's edge protection)
+     (keyless by default; optional runtime key, see cgKey below)
    - DexScreener /latest/dex       → DEX pairs, buys/sells, liquidity —
      SundaeSwap, WingRiders and other indexed venues on Cardano
    - GeckoTerminal /api/v2         → Minswap pools on Cardano (DexScreener
@@ -19,15 +19,24 @@
    UI must always handle null with skeletons / error states + retry. */
 window.LIVE = (function () {
   const CG = "https://api.coingecko.com/api/v3";
-  /* CoinGecko demo API key (Kyle's, free tier). Appended as a query parameter on
-     every CG request — NOT as a header: a custom header triggers a CORS
-     preflight (OPTIONS), which CoinGecko's edge 403s on exactly the networks
-     this key is meant to reach through. Keyed requests pass the edge
-     protection that 403s anonymous calls from many networks. NOTE: this is a
-     client-side static site, so the key is visible in the served JS by design;
-     it's a free key with no billing attached — rotate it in the CoinGecko
-     dashboard if the quota ever gets abused. */
-  const CG_DEMO_KEY = "CG-LWf3eRkt8KF6e95Fm9ELa3EF";
+  /* CoinGecko key: optional, never committed. Requests go keyless to the
+     public API by default. A deployer who wants a CoinGecko demo key sets it
+     at runtime in js/config.local.js (gitignored; copy js/config.example.js):
+       window.ND_CONFIG = { coingeckoDemoKey: "CG-..." };
+     It is sent as the x_cg_demo_api_key query param, not a header, because a
+     custom header triggers a CORS preflight that CoinGecko's edge rejects.
+     Anything served to browsers is public, so only use a free key with no
+     billing attached. If a keyed request is refused (bad or revoked key) we
+     retry once keyless, and if CoinGecko is unreachable the DexScreener
+     fallback feed fills the table. */
+  const cgKey = function () {
+    const k = window.ND_CONFIG && window.ND_CONFIG.coingeckoDemoKey;
+    return typeof k === "string" && /^CG-[A-Za-z0-9]{8,64}$/.test(k) ? k : "";
+  };
+  const withCgKey = function (url) {
+    const k = cgKey();
+    return k ? url + (url.indexOf("?") === -1 ? "?" : "&") + "x_cg_demo_api_key=" + encodeURIComponent(k) : url;
+  };
   const KOIOS = "https://api.koios.rest/api/v1";
   const DEXS = "https://api.dexscreener.com";
   const GT = "https://api.geckoterminal.com/api/v2";
@@ -73,11 +82,11 @@ window.LIVE = (function () {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout || 20000);
     try {
-      const fetchUrl =
-        url.indexOf(CG) === 0
-          ? url + (url.indexOf("?") === -1 ? "?" : "&") + "x_cg_demo_api_key=" + CG_DEMO_KEY
-          : url;
-      const r = await fetch(fetchUrl, { ...fetchInit, signal: ctrl.signal });
+      const isCg = url.indexOf(CG) === 0;
+      let r = await fetch(isCg ? withCgKey(url) : url, { ...fetchInit, signal: ctrl.signal });
+      /* keyed CG request refused (bad/revoked/over-quota key) → one keyless retry */
+      if (isCg && cgKey() && (r.status === 400 || r.status === 401 || r.status === 403 || r.status === 429))
+        r = await fetch(url, { ...fetchInit, signal: ctrl.signal });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       cacheSet(url, j, ttlMs);

@@ -28,7 +28,7 @@ candlestick charts, DEX liquidity analytics, real wallet portfolios (CIP-30), an
 
 | Source | Used for |
 |---|---|
-| [CoinGecko](https://www.coingecko.com) | Prices, mcap, volume, % changes, sparklines, charts, OHLC candles, token metadata — requested with the owner's free demo key (sent as a query param, visible in served JS by design) |
+| [CoinGecko](https://www.coingecko.com) | Prices, mcap, volume, % changes, sparklines, charts, OHLC candles, token metadata — keyless public API by default; an optional demo key can be set at runtime in the gitignored `js/config.local.js` (see `js/config.example.js`), with a keyless retry if it is refused and the DexScreener fallback if CoinGecko is unreachable |
 | [DexScreener](https://dexscreener.com) | Cardano DEX pairs, liquidity, 24h buys/sells |
 | [GeckoTerminal](https://www.geckoterminal.com) | Minswap pool liquidity (merged with DexScreener on the DEX board; buys/sells still DexScreener-only) |
 | [Koios](https://www.koios.rest) | On-chain asset info, holder counts, address/wallet balances, stake pool rankings, governance proposals, votes, DReps — bulk datasets via server snapshots in `data/snapshots/` (Koios sends no CORS headers, so browsers can't fetch it directly; see [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md)) |
@@ -109,8 +109,11 @@ tests/            node:test checks (npm test)
 - The Midnight network strip is a dated snapshot. Live Midnight mainnet data now needs a Blockfrost
   project token (Midnight retired its own indexer on Oct 9, 2026); that token must stay server-side,
   so live stats need the snapshot job, not browser code.
-- The CoinGecko demo key in `js/live.js` is visible in the served JS (free tier, no billing). Rotate it
-  if the quota gets abused; a server-side proxy would hide it.
+- CoinGecko is called keyless by default, so some networks may be rate-limited or blocked by
+  CoinGecko's edge; the DexScreener fallback then fills prices. Any key set in `js/config.local.js`
+  is still visible to visitors once served; only a server-side proxy would hide it.
+- A demo key was committed in earlier history (commit `5a01cde`). It is removed from the code now,
+  history is not rewritten, so that key should be rotated in the CoinGecko dashboard.
 
 ## Custom domain (DNS)
 
