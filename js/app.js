@@ -1552,20 +1552,13 @@
     $("#menuBtn")?.setAttribute("aria-expanded", "false");
   }
 
-  $("#copyDonate")?.addEventListener("click", async () => {
-    const addr = $("#donateAddr")?.textContent?.trim();
+  $("#copyTip")?.addEventListener("click", async () => {
+    const addr = $("#tipAddr")?.textContent?.trim();
     if (!addr) return;
-    try { await navigator.clipboard.writeText(addr); toast("ADA donation address copied"); }
+    try { await navigator.clipboard.writeText(addr); toast("ADA tip address copied"); }
     catch (_) { toast("Copy failed — select the address"); }
   });
-  $("#donateAddr")?.addEventListener("click", () => $("#copyDonate")?.click());
-  $("#copyDonateBtc")?.addEventListener("click", async () => {
-    const addr = $("#donateAddrBtc")?.textContent?.trim();
-    if (!addr) return;
-    try { await navigator.clipboard.writeText(addr); toast("BTC donation address copied"); }
-    catch (_) { toast("Copy failed — select the address"); }
-  });
-  $("#donateAddrBtc")?.addEventListener("click", () => $("#copyDonateBtc")?.click());
+  $("#tipAddr")?.addEventListener("click", () => $("#copyTip")?.click());
 
   /* ——— Boot ——— */
   async function boot() {

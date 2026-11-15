@@ -255,5 +255,23 @@ test("changed scripts have bumped cache-bust query strings", () => {
   const html = read("index.html");
   assert.match(html, /js\/live\.js\?v=20261114a/);
   assert.match(html, /js\/data\.js\?v=20261114a/);
-  assert.match(html, /js\/app\.js\?v=20261114a/);
+  assert.match(html, /js\/app\.js\?v=20261114b/);
+  assert.match(html, /css\/styles\.css\?v=20261114b/);
+});
+
+test("footer and README use Tip copy, never Donate, and have no BTC address", () => {
+  const html = read("index.html");
+  const readme = read("README.md");
+  const TIP_ADA = "addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v";
+  assert.ok(!/donat/i.test(html), "index.html must not say donate");
+  assert.ok(!/donat/i.test(readme), "README.md must not say donate");
+  assert.ok(html.includes("Tip in ADA"));
+  assert.ok(html.includes('aria-label="Tip the dev in ADA"'));
+  assert.ok(readme.includes("Tip in ADA"));
+  assert.ok(html.includes(TIP_ADA));
+  assert.ok(readme.includes(TIP_ADA));
+  // The unconfirmed BTC address, and any other BTC/Bech32 bitcoin address, must not appear
+  const combined = html + "\n" + readme;
+  assert.ok(!combined.includes("3GnR7TWBXAB3pPztBWpNF4LMNEX5yX8vZK"));
+  assert.ok(!/\b(bc1[a-zA-Z0-9]{25,}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})\b/.test(combined), "BTC address in index.html or README");
 });
