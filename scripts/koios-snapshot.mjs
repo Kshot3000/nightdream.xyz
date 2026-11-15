@@ -1,8 +1,8 @@
-/* NightDream data snapshots — runs in GitHub Actions (no browser, no CORS).
+/* NightDream data snapshots — runs server-side (no browser, no CORS).
  *
  * Koios and NightForge do not send `Access-Control-Allow-Origin` on their GET
  * responses, so browsers block cross-origin fetch() from nightdream.xyz. These
- * snapshots are fetched server-side every 6 hours and committed to
+ * snapshots are fetched server-side on a schedule (see docs/SNAPSHOTS.md) and committed to
  * data/snapshots/, which the site loads same-origin. The page code keeps its
  * live-fetch path as a fallback, but snapshots are the primary source.
  *
@@ -154,7 +154,17 @@ async function snapshotGovernance() {
 }
 
 async function snapshotMidnight() {
-  const overview = await getJSON(`${NF}/analytics/overview`, 30000);
+  /* NightForge answered every request with HTTP 410 Gone from Oct 2026, and
+     Midnight's own mainnet indexer was retired on Oct 9, 2026 (Blockfrost now
+     hosts it and needs a project token). Try NightForge once in case it
+     returns; otherwise keep the last midnight.json untouched. The site labels
+     it with its real date and never calls it "live". */
+  let overview;
+  try {
+    overview = await getJSON(`${NF}/analytics/overview`, 20000);
+  } catch (e) {
+    throw new Error(`midnight skipped: NightForge unavailable (${e.message}); kept previous snapshot`);
+  }
   let health = null;
   try { health = await getJSON(`${NF}/health`, 20000); } catch { /* optional */ }
   if (!overview || typeof overview !== "object") throw new Error("nightforge overview empty");
