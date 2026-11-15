@@ -1559,6 +1559,13 @@
     catch (_) { toast("Copy failed — select the address"); }
   });
   $("#tipAddr")?.addEventListener("click", () => $("#copyTip")?.click());
+  $("#copyTipBtc")?.addEventListener("click", async () => {
+    const addr = $("#tipAddrBtc")?.textContent?.trim();
+    if (!addr) return;
+    try { await navigator.clipboard.writeText(addr); toast("BTC tip address copied"); }
+    catch (_) { toast("Copy failed — select the address"); }
+  });
+  $("#tipAddrBtc")?.addEventListener("click", () => $("#copyTipBtc")?.click());
 
   /* ——— Boot ——— */
   async function boot() {
