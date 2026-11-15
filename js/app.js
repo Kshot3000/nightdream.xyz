@@ -964,6 +964,12 @@
     return `<span title="${exact}">${fmt.ada(ada)}</span>`;
   }
 
+  function setSnapshotAge(id, ts, stale) {
+    const el = $("#" + id);
+    if (!el) return;
+    el.textContent = ts ? `, taken ${fmt.timeAgo(ts)}${stale ? " (stale; live Koios unreachable)" : ""}` : "";
+  }
+
   async function renderStaking() {
     $("#stakPulse").innerHTML = skelCards(4);
     $("#stakePoolsTable").querySelector("tbody").innerHTML = `<tr><td colspan="7">${skel(8)}</td></tr>`;
@@ -986,6 +992,7 @@
     _stakeAt = res.fetchedAt;
     _stakeQ = $("#stakeSearch") ? $("#stakeSearch").value : "";
     if (sn) sn.textContent = `registered pools ranked by active stake · Koios · updated ${fmt.timeAgo(_stakeAt)}${res.stale ? " · stale snapshot (live Koios unreachable)" : ""}`;
+    setSnapshotAge("stakSnapAge", _stakeAt, res.stale);
     paintStaking();
   }
 
@@ -1086,6 +1093,7 @@
     _govAt = res.fetchedAt;
     _govQ = $("#govSearch") ? $("#govSearch").value : "";
     if (note) note.textContent = `on-chain governance actions · Koios · updated ${fmt.timeAgo(_govAt)}${res.stale ? " · stale snapshot (live Koios unreachable)" : ""}`;
+    setSnapshotAge("govSnapAge", _govAt, res.stale);
     paintGovernance();
   }
 
@@ -1211,13 +1219,13 @@
     let phaseTxt, closeVal, closeSub;
     const ph = ND.redeemPhase(now);
     if (ph === "thaw") {
-      phaseTxt = "final thaw window · Sep 6 → Dec 4, 2026";
+      phaseTxt = "final thaw window · Sep 6 → end of Dec 4, 2026 UTC";
       closeVal = daysTo(R.thawEnd) + " days";
-      closeSub = "thawing ends Dec 4, 2026";
+      closeSub = "thawing ends at the end of Dec 4, 2026 UTC";
     } else if (ph === "grace") {
-      phaseTxt = "grace period · portal open until ~Mar 4, 2027";
+      phaseTxt = "grace period · portal open until end of Mar 4, 2027 UTC";
       closeVal = daysTo(R.graceEnd) + " days";
-      closeSub = "grace period ends ~Mar 4, 2027";
+      closeSub = "grace period ends at the end of Mar 4, 2027 UTC";
     } else {
       phaseTxt = "portal grace period over";
       closeVal = "ended";
@@ -1228,7 +1236,7 @@
       `<div class="stat-card"><div class="stat-label">${label}</div><div class="stat-value">${value}</div><div class="stat-sub">${sub}</div></div>`;
     stats.innerHTML =
       card(ph === "thaw" ? "Thawing ends" : "Portal closes", closeVal, closeSub) +
-      card("Grace period ends", "~Mar 4, 2027", "90 days after thawing ends") +
+      card("Grace period ends", "end of Mar 4, 2027 UTC", "90 days after thawing ends") +
       card("Thaw model", "4 × 25%", "90 days apart") +
       card("Final window", "Thaw 4", R.windows[3][1]);
     try {
@@ -1273,7 +1281,7 @@
   }
   function updateDustCalc() {
     const rawHoldings = Number($("#nightHoldings")?.value ?? 0);
-    const rawFactor = Number($("#genFactor")?.value ?? 0.0146);
+    const rawFactor = Number($("#genFactor")?.value ?? ND.MIDNIGHT.genFactor);
     const el = $("#dustResult");
     if (!el) return;
     if (!Number.isFinite(rawHoldings) || !Number.isFinite(rawFactor) || rawHoldings < 0 || rawFactor < 0) {
@@ -1281,13 +1289,13 @@
       return;
     }
     const holdings = rawHoldings;
-    // round to 4dp: keeps float artifacts (e.g. 0.014600000344216824) out of the math
+    // round to 4dp: keeps float artifacts out of the math (default 0.7143)
     const factor = Number(rawFactor.toFixed(4));
     const cap = holdings * ND.MIDNIGHT.dustPerNightMax;
     const rate = holdings * factor;
     el.innerHTML = `<strong>Capacity:</strong> ~${fmt.numx(cap)} DUST max (5 × NIGHT)<br/>
-      <strong>Est. generation:</strong> ~${fmt.estx(rate)} DUST / day<br/>
-      <span class="muted">Model estimate — real rates follow Midnight network parameters.</span>`;
+      <strong>Est. generation:</strong> ~${fmt.estx(rate)} DUST / day until the cap (~7 days)<br/>
+      <span class="muted">Generation stops at 5 DUST per NIGHT after about 7 days, then stays there until the backing NIGHT is spent. Default rate follows official Midnight ledger parameters.</span>`;
   }
 
   /* ——— Watchlist ——— */

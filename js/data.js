@@ -11,7 +11,19 @@ ND.META = {
 /* Midnight economics (documented concepts — model inputs, not market data) */
 ND.MIDNIGHT = {
   dustPerNightMax: 5,
-  generationNote: "Each NIGHT can sustain up to 5 DUST capacity. Generation rate depends on holdings and Midnight network parameters (model estimates).",
+  /* Official ledger parameters:
+     night_dust_ratio = 5_000_000_000 Specks/Star (5 DUST per NIGHT cap)
+     generation_decay_rate = 8_267 Specks/Star/s
+     time to cap = 604,815 seconds ≈ 7 days
+     daily rate = 5 / (604815 / 86400) ≈ 0.7143 DUST per NIGHT per day
+     Sources: https://docs.midnight.network/concepts/dust-architecture
+              https://docs.midnight.network/guides/manage-dust
+              https://midnight.network/blog/the-mechanics-of-dust-generation-and-decay
+     Generation is linear to the cap, then the value stays there until the
+     backing NIGHT is spent. */
+  genFactor: 0.7143,
+  timeToCapSeconds: 604815,
+  generationNote: "Each NIGHT can generate up to 5 DUST. At the official rate (about 0.714 DUST per NIGHT per day) generation reaches that cap in about 7 days, then stays there until the backing NIGHT is spent.",
   bridgeNote: "Cardano hosts NIGHT (cNIGHT); registering it lets your Midnight address generate DUST, which pays for shielded transactions. A two-way NIGHT token bridge is planned but not live on mainnet yet, so this diagram is a mental model, not a working route.",
 };
 
@@ -50,11 +62,14 @@ ND.safeImg = function (u) {
 
 /* NIGHT redemption schedule (midnight.gd/redeem, Midnight token guide).
    Thawing ends on Dec 4, 2026; the redemption portal stays open for a
-   90-day grace period after that. Timestamps mark the END of each day in UTC
-   so the countdown never flips to "ended" while it is still Dec 4 somewhere. */
+   90-day grace period after that. Official sources give no time of day, so
+   these timestamps mark the end of each calendar day in UTC
+   (2026-12-05T00:00:00Z and 2027-03-05T00:00:00Z). After 18:00
+   America/Chicago on Dec 4 (or Mar 4), a visitor still on that local date
+   will already see the next phase. */
 ND.REDEEM = {
-  thawEnd: Date.UTC(2026, 11, 5),     // end of Dec 4, 2026 (UTC)
-  graceEnd: Date.UTC(2027, 2, 5),     // end of ~Mar 4, 2027 (UTC) — 90 days after
+  thawEnd: Date.UTC(2026, 11, 5),     // end of Dec 4, 2026 UTC
+  graceEnd: Date.UTC(2027, 2, 5),     // end of Mar 4, 2027 UTC — 90 days after
   thawDays: 90,
   windows: [
     ["Thaw 1", "Dec 10, 2025 – Mar 9, 2026"],

@@ -55,11 +55,13 @@ test("NIGHT redemption phases follow the published schedule", () => {
   const ND = loadND();
   // still thawing at the very end of Dec 4, 2026 UTC
   assert.equal(ND.redeemPhase(Date.UTC(2026, 11, 4, 23, 59)), "thaw");
-  // Dec 4 evening in US Central (UTC-6) is still Dec 4 → still thawing
+  // 12:00 UTC on Dec 4 is 6:00 AM CST — still thawing
   assert.equal(ND.redeemPhase(Date.UTC(2026, 11, 4, 12)), "thaw");
+  // 00:01 UTC on Dec 5 is 6:01 PM CST on Dec 4 — grace, because we flip at
+  // end of Dec 4, 2026 UTC, not at local midnight in Chicago
   assert.equal(ND.redeemPhase(Date.UTC(2026, 11, 5, 0, 1)), "grace");
   assert.equal(ND.redeemPhase(Date.UTC(2027, 2, 4, 23)), "grace");
-  assert.equal(ND.redeemPhase(Date.UTC(2027, 2, 5, 1)), "ended");
+  assert.equal(ND.redeemPhase(Date.UTC(2027, 2, 5, 0, 1)), "ended");
   // grace period is 90 days after thawing ends
   assert.equal((ND.REDEEM.graceEnd - ND.REDEEM.thawEnd) / 86400000, 90);
   assert.equal(ND.REDEEM.windows[3][1], "Sep 6 – Dec 4, 2026");
@@ -201,4 +203,57 @@ test("decimals and DexScreener txn counts never reach innerHTML raw (lint)", () 
   const app = read("js/app.js");
   assert.ok(!/\$\{\s*meta\.decimals\b/.test(app) && !/\?\s*meta\.decimals\s*:/.test(app), "raw meta.decimals");
   assert.ok(!/(\$\{|\?|:)\s*p\.(buys|sells)24\b(?!\))/.test(app.replace(/numText\(p\.(buys|sells)24\)/g, "")), "raw buys24/sells24");
+});
+
+test("UI countdown labels use end of day UTC", () => {
+  const app = read("js/app.js");
+  const data = read("js/data.js");
+  assert.ok(app.includes("end of Dec 4, 2026 UTC"));
+  assert.ok(app.includes("end of Mar 4, 2027 UTC"));
+  assert.ok(!data.includes("still Dec 4 somewhere"));
+});
+
+test("staking and governance footnotes use snapshot age, not a 6-hour refresh", () => {
+  const html = read("index.html");
+  const app = read("js/app.js");
+  assert.ok(!html.includes("refreshed every 6 hours"));
+  assert.ok(!app.includes("refreshed every 6 hours"));
+  assert.ok(html.includes('id="stakSnapAge"'));
+  assert.ok(html.includes('id="govSnapAge"'));
+  assert.ok(app.includes('setSnapshotAge("stakSnapAge"'));
+  assert.ok(app.includes('setSnapshotAge("govSnapAge"'));
+  assert.ok(app.includes("taken ${fmt.timeAgo(ts)}"));
+});
+
+test("default DUST generation factor matches the official rate and cap", () => {
+  const ND = loadND();
+  const official = 5 / (604815 / 86400);
+  assert.equal(ND.MIDNIGHT.dustPerNightMax, 5);
+  assert.equal(ND.MIDNIGHT.timeToCapSeconds, 604815);
+  assert.equal(ND.MIDNIGHT.genFactor, 0.7143);
+  assert.ok(Math.abs(ND.MIDNIGHT.genFactor - official) < 1e-4, official);
+  const html = read("index.html");
+  assert.match(html, /id="genFactor"[^>]*value="0.7143"/);
+  assert.ok(!html.includes("0.0146"));
+  assert.ok(!read("js/app.js").includes("0.0146"));
+  assert.match(ND.MIDNIGHT.generationNote, /5 DUST/);
+  assert.match(ND.MIDNIGHT.generationNote, /about 7 days/);
+  const app = read("js/app.js");
+  assert.ok(app.includes("until the cap (~7 days)"));
+  assert.ok(app.includes("Generation stops at 5 DUST per NIGHT after about 7 days"));
+});
+
+test("footer does not list NightForge as a live source", () => {
+  const html = read("index.html");
+  const footer = html.slice(html.indexOf('<footer'), html.indexOf("</footer>"));
+  assert.ok(footer.includes("NightForge snapshot (not live)"));
+  assert.ok(!/MinSwap · NightForge</.test(footer));
+  assert.ok(!/· NightForge</.test(footer.replace("NightForge snapshot (not live)", "")));
+});
+
+test("changed scripts have bumped cache-bust query strings", () => {
+  const html = read("index.html");
+  assert.match(html, /js\/live\.js\?v=20261114a/);
+  assert.match(html, /js\/data\.js\?v=20261114a/);
+  assert.match(html, /js\/app\.js\?v=20261114a/);
 });
