@@ -682,20 +682,20 @@ canvas.chart-lg { width: 100% !important; height: 100% !important; }
   flex: 1;
   min-width: 220px;
 }
-.footer-donate {
+.footer-tip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 12px;
   max-width: 100%;
-  /* ~390px: the nowrap donation address is a 600px+ unbreakable run; as a flex
+  /* ~390px: the nowrap tip address is a 600px+ unbreakable run; as a flex
      item its automatic minimum size (min-content) would expand the whole page
      layout viewport. min-width:0 lets it shrink; the code keeps its own
      max-width + ellipsis. */
   min-width: 0;
 }
-.footer-donate code {
+.footer-tip code {
   font-family: var(--mono);
   font-size: 10px;
   background: var(--bg-elev);
@@ -709,7 +709,7 @@ canvas.chart-lg { width: 100% !important; height: 100% !important; }
   white-space: nowrap;
   cursor: pointer;
 }
-.footer-donate code:hover { border-color: rgba(139,124,255,0.45); color: var(--accent-2); }
+.footer-tip code:hover { border-color: rgba(139,124,255,0.45); color: var(--accent-2); }
 
 /* ---------- Ecosystem strip ---------- */
 .eco-strip { margin: 0 0 18px; }

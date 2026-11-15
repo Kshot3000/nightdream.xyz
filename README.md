@@ -130,14 +130,8 @@ Cardano Foundation, Input Output, Intersect, or the Midnight Foundation.
 
 Built by [@kshot9000](https://x.com/kshot9000).
 
-**Donate ADA:**
+**Tip in ADA:**
 
 ```
 addr1q8hnl6vl5a6k3rw3n5g3jtte696zcl76kfatzv7gpswa9r0dj7fma6klq55y4ffm7tf0em09udnyhuk4ah92pl5x9jpqjae44v
-```
-
-**Donate Bitcoin (BTC):**
-
-```
-3GnR7TWBXAB3pPztBWpNF4LMNEX5yX8vZK
 ```
