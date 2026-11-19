@@ -1,0 +1,33 @@
+name: NightDream quality gates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/**"
+      - "js/**"
+      - "index.html"
+      - "package.json"
+      - "data/snapshots/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check scripts and snapshot validation
+        run: |
+          node --check scripts/koios-snapshot.mjs
+          node --check scripts/snapshot-validate.mjs
+          npm test

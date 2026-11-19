@@ -1,0 +1,55 @@
+name: Refresh Cardano analytics snapshots
+
+on:
+  # On first deployment, run immediately when this workflow itself is added.
+  # Data-only commits never match this path, so refreshes cannot loop.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/refresh-snapshots.yml"
+  schedule:
+    # Four refresh opportunities per day; GitHub scheduling is best-effort.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightdream-koios-snapshots
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Validate and publish Koios snapshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Refresh public Cardano datasets
+        run: node scripts/koios-snapshot.mjs
+      - name: Check snapshot integrity and application regressions
+        run: npm test
+      - name: Commit only updated datasets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "nightdream-snapshots[bot]"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/snapshots/pools.json data/snapshots/governance.json
+          if git diff --cached --quiet; then
+            echo "Upstream data unchanged; no commit required"
+            exit 0
+          fi
+          git commit -m "data: refresh validated Cardano snapshots"
+          # Never force-push. If another edit arrives, safely rebase this
+          # data-only commit, failing the run if the same JSON conflicts.
+          git pull --rebase origin main
+          git push origin HEAD:main

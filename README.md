@@ -77,9 +77,12 @@ linked, that snapshots parse, and a lint that feed/on-chain strings are escaped 
 npm run snapshots   # node scripts/koios-snapshot.mjs — writes data/snapshots/*.json
 ```
 
-There is no scheduled job in this repo yet; see [docs/SNAPSHOTS.md](docs/SNAPSHOTS.md) for the
-GitHub Actions workflow to add. Until it runs, panels fall back to live Koios (often CORS-blocked) and
-then to the last snapshot, labelled as stale.
+The [scheduled GitHub Actions refresh](.github/workflows/refresh-snapshots.yml) is configured to
+attempt Koios updates every six hours once merged into the default branch. The [quality
+gates](.github/workflows/site-tests.yml) test the JSON schemas and existing application.
+Public datasets are only published if Koios returns valid nonempty responses; complete upstream outages
+fail the job and preserve the previous snapshot. If a feed remains unavailable, the UI still
+labels its snapshot as stale. Check the Actions history to confirm that scheduled jobs are actually running.
 
 ## Project layout
 
