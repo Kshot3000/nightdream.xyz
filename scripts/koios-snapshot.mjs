@@ -1,6 +1,6 @@
 /* NightDream data snapshots — runs server-side (no browser, no CORS).
  *
- * Koios and NightForge do not send `Access-Control-Allow-Origin` on their GET
+ * Koios does not send `Access-Control-Allow-Origin` on its GET
  * responses, so browsers block cross-origin fetch() from nightdream.xyz. These
  * snapshots are fetched server-side on a schedule (see docs/SNAPSHOTS.md) and committed to
  * data/snapshots/, which the site loads same-origin. The page code keeps its
@@ -10,14 +10,15 @@
  * Writes (only on success; a failed section keeps the previous file):
  *   data/snapshots/pools.json       { rows, fetchedAt }      — top-150 pools
  *   data/snapshots/governance.json  { proposals, dreps, drepCount, fetchedAt }
- *   data/snapshots/midnight.json    { overview, health, fetchedAt }
+ *   data/snapshots/midnight.json    frozen historic snapshot (not refreshed)
  */
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { validateSnapshot } from "./snapshot-validate.mjs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const KOIOS = "https://api.koios.rest/api/v1";
-const NF = "https://mainnet.nightforge.jp/api";
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "data", "snapshots");
 const SLEEP_MS = 400;
 
@@ -55,9 +56,21 @@ async function postJSON(url, body, timeoutMs = 45000) {
 }
 
 function write(name, obj) {
+  // Validate before touching a known-good snapshot. The stale snapshot stays
+  // in place if the Koios response is empty, truncated or unexpectedly shaped.
+  const dataset = name === "pools.json" ? "pools" : name === "governance.json" ? "governance" : null;
+  validateSnapshot(dataset, obj);
   mkdirSync(OUT, { recursive: true });
-  writeFileSync(join(OUT, name), JSON.stringify(obj));
-  console.log(`wrote ${name} (${(JSON.stringify(obj).length / 1024).toFixed(0)} KB)`);
+  const destination = join(OUT, name);
+  const temporary = join(OUT, `.${name}.${randomUUID()}.tmp`);
+  const body = JSON.stringify(obj) + "\n";
+  try {
+    writeFileSync(temporary, body, { flag: "wx", mode: 0o600 });
+    renameSync(temporary, destination);
+    console.log(`refreshed ${name} (${(body.length / 1024).toFixed(0)} KB)`);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }
 
 async function snapshotPools() {
@@ -153,35 +166,27 @@ async function snapshotGovernance() {
   });
 }
 
-async function snapshotMidnight() {
-  /* NightForge answered every request with HTTP 410 Gone from Oct 2026, and
-     Midnight's own mainnet indexer was retired on Oct 9, 2026 (Blockfrost now
-     hosts it and needs a project token). Try NightForge once in case it
-     returns; otherwise keep the last midnight.json untouched. The site labels
-     it with its real date and never calls it "live". */
-  let overview;
-  try {
-    overview = await getJSON(`${NF}/analytics/overview`, 20000);
-  } catch (e) {
-    throw new Error(`midnight skipped: NightForge unavailable (${e.message}); kept previous snapshot`);
-  }
-  let health = null;
-  try { health = await getJSON(`${NF}/health`, 20000); } catch { /* optional */ }
-  if (!overview || typeof overview !== "object") throw new Error("nightforge overview empty");
-  write("midnight.json", { overview, health, fetchedAt: Date.now() });
-}
+// Midnight's retired NightForge indexer cannot produce fresh data.
+// Preserve the dated October snapshot as a historical reference; never
+// rewrite its fetchedAt or pretend that it is a live feed.
+//
+// Live Midnight snapshots require a separately authenticated server-side
+// source with approved key management and their own validation rules.
 
 const results = await Promise.allSettled([
   snapshotPools().then(() => "pools"),
   snapshotGovernance().then(() => "governance"),
-  snapshotMidnight().then(() => "midnight"),
 ]);
 const ok = results.filter((r) => r.status === "fulfilled").map((r) => r.value);
 const failed = results.filter((r) => r.status === "rejected");
 for (const f of failed) console.error("FAILED:", f.reason?.message || f.reason);
-console.log(`done: ${ok.join(", ") || "none"} ok, ${failed.length} failed`);
-if (!existsSync(join(OUT, "pools.json")) && !existsSync(join(OUT, "governance.json")) && !existsSync(join(OUT, "midnight.json"))) {
-  console.error("no snapshots exist at all — failing");
-  process.exit(1);
+console.log(`done: ${ok.join(", ") || "none"} refreshed; ${failed.length} Koios refreshes failed`);
+// Previous JSON in the checkout is not evidence that THIS run succeeded.
+// Fail the action when both feeds fail, so an alert surfaces instead of a
+// misleading green job that silently leaves data stale for another week.
+if (ok.length === 0) {
+  console.error("No live Koios snapshots were refreshed. Old files were preserved.");
+  process.exitCode = 1;
+} else if (failed.length) {
+  console.warn("Partial refresh: the failed dataset retains its previous timestamp.");
 }
-process.exit(0);
