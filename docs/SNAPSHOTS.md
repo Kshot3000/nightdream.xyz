@@ -12,41 +12,45 @@ fetches the bulk datasets server-side and writes them to `data/snapshots/`:
 The site uses a snapshot as-is while it is under 36 hours old. After that it tries live Koios, then
 falls back to the old snapshot and labels it stale with its real age.
 
-## Scheduled refresh (not set up yet)
+## Scheduled refresh and integrity guards
 
-No workflow exists in this repo, which is why the snapshots went a month without a refresh in
-Oct–Nov 2026. To schedule it, save this as `.github/workflows/snapshots.yml` (pushing workflow files
-needs a token with the `workflow` scope, or add it in the GitHub web editor):
+The repository contains two workflows:
 
-```yaml
-name: snapshots
-on:
-  schedule: [{ cron: "17 */6 * * *" }]
-  workflow_dispatch:
-permissions:
-  contents: write
-concurrency: { group: snapshots, cancel-in-progress: false }
-jobs:
-  refresh:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: node scripts/koios-snapshot.mjs
-      - run: npm test
-      - name: Commit snapshots
-        run: |
-          git add data/snapshots
-          git diff --cached --quiet && exit 0
-          git -c user.name=nightdream-snapshots -c user.email=actions@users.noreply.github.com \
-            commit -m "data: refresh Koios snapshots"
-          git push
+- `.github/workflows/refresh-snapshots.yml`: every six hours (minute 17 UTC)
+  and manual workflow dispatch, calls `scripts/koios-snapshot.mjs`, runs all
+  tests, and commits **only** successful pool/governance JSON updates to
+  `main`. The job needs `contents: write`; branch protection or repository
+  policy can still block automatic pushes. GitHub cron scheduling is best-effort
+  and may delay jobs — confirm real runs in the Actions tab.
+- `.github/workflows/site-tests.yml`: read-only Node tests for source changes
+  and pull requests, including snapshot validation.
+
+The writer checks each Koios result's shape, current timestamp, unique pool
+and proposal IDs, reasonable bounds and numeric values before replacing a
+known-good snapshot. Writes use a same-directory temporary file and atomic
+rename. A failed feed leaves its previous file unchanged; if *both* Koios
+feeds fail, the command returns a failing exit status to alert the team.
+
+The UI distinguishes snapshots over 36 hours old from fresh ones. These are
+time labels, **not** proof of real-time chain finality or upstream accuracy.
+No stale snapshot is silently relabeled as fresh.
+
+To run a one-off refresh from an authorized development machine:
+
+```bash
+node scripts/koios-snapshot.mjs
+npm test
 ```
+
+If no files update, check Koios availability, quota, and the Actions logs.
+Do not regenerate timestamp fields artificially.
 
 ## Live Midnight stats
 
-Midnight retired `indexer.mainnet.midnight.network` on Oct 9, 2026. The public mainnet indexer is now
-Blockfrost (`https://midnight-mainnet.blockfrost.io/api/v0`) and needs a project token. If one is
-added, read it from a repository secret inside the scheduled job above and write `midnight.json`
-there. Never put the token in `js/`.
+The NightForge endpoint is retired and is no longer requested by the job. The retained
+`midnight.json` is historical and shows its original October 2026 date.
+A new live Midnight source must be approved and validated separately. Blockfrost
+Midnight access requires a project token; it belongs in a protected repository
+secret and server-side job, **never** in browser JavaScript or a public JSON file.
+A new source must publish only real observed metrics and preserve the last
+known-good timestamp on failure.
