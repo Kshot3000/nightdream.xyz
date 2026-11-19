@@ -1,6 +1,12 @@
 name: Refresh Cardano analytics snapshots
 
 on:
+  # On first deployment, run immediately when this workflow itself is added.
+  # Data-only commits never match this path, so refreshes cannot loop.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/refresh-snapshots.yml"
   schedule:
     # Four refresh opportunities per day; GitHub scheduling is best-effort.
     - cron: "17 */6 * * *"
